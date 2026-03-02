@@ -1,5 +1,5 @@
 /**
- * devvault-mcp/index.ts — Universal MCP Server for AI Agents (v5.4).
+ * devvault-mcp/index.ts — Universal MCP Server for AI Agents (v6.0).
  *
  * Thin shell: Hono router, CORS, auth middleware, MCP transport.
  * All tool logic lives in _shared/mcp-tools/ (one file per tool).
@@ -56,7 +56,7 @@ function withCors(response: Response): Response {
 const client = getSupabaseClient("general");
 const mcp = new McpServer({
   name: "devvault",
-  version: "5.4.0",
+  version: "6.0.0",
   logger: {
     error: (...args: unknown[]) => console.error("[MCP:LIB]", ...args),
     warn: (...args: unknown[]) => console.warn("[MCP:LIB]", ...args),

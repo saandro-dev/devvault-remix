@@ -35,6 +35,7 @@ import { registerDiaryListTool } from "./diary-list.ts";
 import { registerGetPlaybookTool } from "./get-playbook.ts";
 import { registerTaskStartTool } from "./task-start.ts";
 import { registerTaskEndTool } from "./task-end.ts";
+
 export function registerAllTools(
   server: McpServerLike,
   client: SupabaseClient,
