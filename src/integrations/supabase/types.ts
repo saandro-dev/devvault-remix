@@ -915,6 +915,15 @@ export type Database = {
         Returns: boolean
       }
       export_module_tree: { Args: { p_root_id: string }; Returns: Json }
+      fetch_modules_without_changelog: {
+        Args: { p_limit?: number }
+        Returns: {
+          created_at: string
+          id: string
+          title: string
+          version: string
+        }[]
+      }
       get_domain_counts: {
         Args: { p_scope?: string; p_user_id: string }
         Returns: {
