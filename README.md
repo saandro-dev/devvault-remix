@@ -1,73 +1,113 @@
-# Welcome to your Lovable project
+# DevVault
 
-## Project info
+**An AI-first knowledge base platform for developers and their AI agents.**
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+DevVault stores, organizes, and serves structured technical knowledge — code snippets, architecture patterns, SaaS playbooks, SQL migrations, and diagnostic guides — so that AI agents can autonomously query, consume, and contribute to it during their workflows.
 
-## How can I edit this code?
+---
 
-There are several ways of editing your application.
+## What is DevVault?
 
-**Use Lovable**
+DevVault operates with two distinct access channels, each with a clearly defined role:
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+### Primary Channel — AI Agents via MCP (90%+ of real system usage)
 
-Changes made via Lovable will be committed automatically to this repo.
+AI agents connect to the DevVault MCP server and interact with the knowledge base through **22 structured tools**. This is the core use case of the product.
 
-**Use your preferred IDE**
+**MCP Endpoint:** `https://<project>.supabase.co/functions/v1/devvault-mcp`
+**Authentication:** API key (`dvlt_...`) via `X-DevVault-Key` header
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+Typical agent workflow:
+```
+devvault_bootstrap    → Load the full knowledge graph index
+devvault_search       → Find modules by problem description or keywords
+devvault_get          → Fetch full code + dependencies + context
+devvault_diagnose     → Query the knowledge base when an error occurs
+devvault_ingest       → Contribute new knowledge after implementation
+devvault_diary_bug    → Document problems encountered during execution
+```
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+### Secondary Channel — Humans via Web UI (curation and administration)
 
-Follow these steps:
+Human users access the web interface to act as **curators and administrators** of the knowledge base that agents consume. Typical human actions:
+
+- Review and validate modules ingested by agents
+- Manage projects and organize the vault
+- Monitor system health and API usage
+- Configure and revoke API keys for agents
+- Browse the Bug Diary and activity history
+
+---
+
+## Architecture
+
+| Layer | Technology |
+| :--- | :--- |
+| Frontend | Vite + React + TypeScript + TailwindCSS |
+| Backend | 16 Supabase Edge Functions (Deno) |
+| Database | PostgreSQL 17 (Supabase) |
+| Auth (Web UI) | Supabase Auth (JWT) |
+| Auth (Agents) | Custom API keys (`dvlt_...`) via Supabase Vault |
+| Search | Hybrid: `pgvector` (semantic) + `tsvector` (full-text) + `pg_trgm` |
+| Secrets | Supabase Vault (pgsodium encryption) |
+| Agent Protocol | MCP (Model Context Protocol) — 22 tools |
+
+---
+
+## MCP Tools Reference
+
+| Category | Tools |
+| :--- | :--- |
+| **Discovery** | `devvault_bootstrap`, `devvault_search`, `devvault_list`, `devvault_get`, `devvault_get_group`, `devvault_domains`, `devvault_load_context`, `devvault_quickstart` |
+| **CRUD** | `devvault_ingest`, `devvault_update`, `devvault_delete`, `devvault_validate`, `devvault_changelog` |
+| **Diagnostics** | `devvault_diagnose`, `devvault_check_updates`, `devvault_export_tree` |
+| **Bug Diary** | `devvault_diary_bug`, `devvault_diary_resolve`, `devvault_diary_list`, `devvault_report_bug`, `devvault_resolve_bug` |
+| **Reporting** | `devvault_report_success` |
+
+---
+
+## Public API (REST)
+
+For non-MCP integrations (CI/CD, scripts, external tools):
+
+| Endpoint | Method | Description |
+| :--- | :--- | :--- |
+| `/vault-ingest` | POST | Ingest one or multiple modules |
+| `/vault-query` | POST | Search and query the knowledge base |
+
+Authentication: `X-DevVault-Key: dvlt_...`
+
+Full API reference available at `/docs/api` in the web UI.
+
+---
+
+## Documentation
+
+| Document | Description |
+| :--- | :--- |
+| `docs/VAULT_CONTENT_STANDARDS.md` | Rules and standards for content quality — required reading for any agent ingesting modules |
+| `docs/EDGE_FUNCTIONS_REGISTRY.md` | Complete registry of all 16 Edge Functions, auth architecture, and changelog |
+
+---
+
+## Local Development
 
 ```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+# Clone the repository
+git clone https://github.com/saandro-dev/devvault-remix.git
+cd devvault-remix
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+# Install dependencies
+npm install
 
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
+# Start the development server
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+**Requirements:** Node.js 18+ and npm.
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+---
 
-**Use GitHub Codespaces**
+## Design Principle
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
-
-## What technologies are used for this project?
-
-This project is built with:
-
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+> Every technical decision must first be evaluated by its impact on the AI agent experience consuming data via MCP. If a change improves the human UI but degrades the quality of data returned to agents, it is rejected.
