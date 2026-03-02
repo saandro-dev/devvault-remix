@@ -47,3 +47,6 @@ verify_jwt = false
 
 [functions.vault-backfill-embeddings]
 verify_jwt = false
+
+[functions.vault-backfill-diagnose-fields]
+verify_jwt = false

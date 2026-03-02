@@ -1,6 +1,6 @@
 # DevVault - Edge Functions Registry
 
-> **🔴 SINGLE SOURCE OF TRUTH** - This document lists ALL 16 Edge Functions deployed on Supabase for the DevVault project.
+> **🔴 SINGLE SOURCE OF TRUTH** - This document lists ALL 17 Edge Functions deployed on Supabase for the DevVault project.
 > Last updated: 2026-03-02
 > Maintainer: AI Architect
 
@@ -11,7 +11,7 @@
 ```
 ╔═══════════════════════════════════════════════════════════════╗
 ║  ✅ DEVVAULT PROTOCOL V2 - 10.0/10 - DUAL-AUTH ARCHITECTURE   ║
-║     16 Edge Functions | 2 Auth Systems | Zero Legacy Code      ║
+║     17 Edge Functions | 2 Auth Systems | Zero Legacy Code      ║
 ║     MCP Server v5.3: 22 Tools | Knowledge Flywheel + Tree     ║
 ║     Phase 3: Hybrid Search (pgvector + tsvector + pg_trgm)     ║
 ║     Runtime: 100% Deno.serve() native                         ║
@@ -22,6 +22,15 @@
 ```
 
 ---
+
+## v5.3.2 Changelog (2026-03-02)
+
+### Fixes
+- **vault-ingest REST endpoint:** Added 12 missing fields to both ingest mapping and update `allowedFields`: `common_errors`, `solves_problems`, `test_code`, `difficulty`, `estimated_minutes`, `database_schema`, `prerequisites`, `ai_metadata`, `usage_hint`, `module_group`, `implementation_order`, `version`. Now fully aligned with MCP `ingest.ts`/`update.ts`.
+
+### New Functions
+- **vault-backfill-diagnose-fields:** One-shot administrative function that uses OpenAI (`gpt-4o-mini`) to populate `common_errors` and `solves_problems` on global modules where these fields are empty. Processes in batches of 10 with 2s delay. Supports `dry_run` mode and configurable `limit`.
+
 
 ## v5.3.1 Changelog (2026-03-02)
 
@@ -62,10 +71,10 @@
 
 | Metric | Value |
 | :--- | :--- |
-| **Total Functions** | 16 |
+| **Total Functions** | 17 |
 | **Internal Functions (Frontend)** | 12 |
 | **Public Functions (External API)** | 3 |
-| **Utility Functions (One-shot)** | 1 |
+| **Utility Functions (One-shot)** | 2 |
 | **Functions with verify_jwt=true** | 0 ✅ |
 | **config.toml entries** | 16 ✅ |
 | **API Key System (External)** | `dvlt_` keys via Supabase Vault ✅ |
@@ -147,3 +156,4 @@ To limit the "blast radius" in case of a key leak, the system uses two service k
 | Function | Auth | Domain | Description |
 | :--- | :--- | :--- | :--- |
 | `vault-backfill-embeddings` | Manual | general | **Embedding backfill for existing modules.** Processes modules with `embedding IS NULL` in batches of 20, generating embeddings via OpenAI `text-embedding-3-small`. One-shot function for manual execution after Phase 3 migration. |
+| `vault-backfill-diagnose-fields` | Manual | general | **Diagnose fields backfill for existing modules.** Uses OpenAI `gpt-4o-mini` to generate `common_errors` and `solves_problems` for global modules where these fields are empty. Processes in batches of 10 with 2s delay. Supports `dry_run` mode and configurable `limit` (default 500, max 1000). |
