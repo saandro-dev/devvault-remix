@@ -1,6 +1,6 @@
 # DevVault - Edge Functions Registry
 
-> **🔴 SINGLE SOURCE OF TRUTH** - This document lists ALL 17 Edge Functions deployed on Supabase for the DevVault project.
+> **🔴 SINGLE SOURCE OF TRUTH** - This document lists ALL 18 Edge Functions deployed on Supabase for the DevVault project.
 > Last updated: 2026-03-02
 > Maintainer: AI Architect
 
@@ -11,7 +11,7 @@
 ```
 ╔═══════════════════════════════════════════════════════════════╗
 ║  ✅ DEVVAULT PROTOCOL V2 - 10.0/10 - DUAL-AUTH ARCHITECTURE   ║
-║     17 Edge Functions | 2 Auth Systems | Zero Legacy Code      ║
+║     18 Edge Functions | 2 Auth Systems | Zero Legacy Code      ║
 ║     MCP Server v5.4: 25 Tools | Knowledge Flywheel + Tree     ║
 ║     Phase 3: Hybrid Search (pgvector + tsvector + pg_trgm)     ║
 ║     Runtime: 100% Deno.serve() native                         ║
@@ -22,6 +22,12 @@
 ```
 
 ---
+
+## v5.5 Changelog (2026-03-02)
+
+### Phase 5A: Playbook Population
+- **vault-backfill-playbooks (new EF):** One-shot administrative function that converts `module_group` values into `vault_playbooks` and `vault_playbook_modules` records. Idempotent (skips existing slugs). Supports `dry_run` mode and configurable `min_modules` threshold.
+- **bootstrap.ts:** Added `behavioral_rule` mandating real `database_schema` DDL for backend/architecture/security modules. Added `anti_pattern` warning about 15-point validation penalty for missing schemas.
 
 ## v5.4 Changelog (2026-03-02)
 
@@ -88,12 +94,12 @@
 
 | Metric | Value |
 | :--- | :--- |
-| **Total Functions** | 17 |
+| **Total Functions** | 18 |
 | **Internal Functions (Frontend)** | 12 |
 | **Public Functions (External API)** | 3 |
-| **Utility Functions (One-shot)** | 2 |
+| **Utility Functions (One-shot)** | 3 |
 | **Functions with verify_jwt=true** | 0 ✅ |
-| **config.toml entries** | 17 ✅ |
+| **config.toml entries** | 18 ✅ |
 | **API Key System (External)** | `dvlt_` keys via Supabase Vault ✅ |
 | **Security Domains (Secrets)** | 2 (admin, general) ✅ |
 | **Base URL (Internal & External)** | `https://bskfnthwewhpfrldbhqx.supabase.co/functions/v1/` |
@@ -174,3 +180,4 @@ To limit the "blast radius" in case of a key leak, the system uses two service k
 | :--- | :--- | :--- | :--- |
 | `vault-backfill-embeddings` | Manual | general | **Embedding backfill for existing modules.** Processes modules with `embedding IS NULL` in batches of 20, generating embeddings via OpenAI `text-embedding-3-small`. One-shot function for manual execution after Phase 3 migration. |
 | `vault-backfill-diagnose-fields` | Manual | general | **Diagnose fields backfill for existing modules.** Uses OpenAI `gpt-4o-mini` to generate `common_errors` and `solves_problems` for global modules where these fields are empty. Processes in batches of 10 with 2s delay. Supports `dry_run` mode and configurable `limit` (default 500, max 1000). |
+| `vault-backfill-playbooks` | Manual | general | **Playbook backfill from module_groups.** Converts `module_group` values into `vault_playbooks` and `vault_playbook_modules` records. Idempotent (skips existing slugs). Params: `owner_user_id` (required), `min_modules` (default 3), `dry_run` (default false). |
