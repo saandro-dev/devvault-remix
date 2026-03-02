@@ -1,104 +1,204 @@
 
 
-# Audit Report v5.3.2 — Post-Implementation Verification
+# Plano de Implementacao — 3 Melhorias DevVault (Feedback de Agentes)
 
-## Status: 3 Issues Found (2 bugs, 1 doc inconsistency)
+## Resumo Executivo
 
----
+Tres novas capacidades para transformar o DevVault de uma "biblioteca de conhecimento" em um "sistema de producao de software autonomo". Todas as decisoes seguem a Secao 3 do Protocolo — nota minima 9.8/10.
 
-## What Was Successfully Implemented
-
-1. **vault-ingest REST endpoint** — All 12 missing fields correctly added to both ingest mapping (lines 142-153) and update `allowedFields` (lines 200-203). Fully aligned with MCP `update.ts`. PASS.
-2. **vault-backfill-diagnose-fields** — Edge function created, deployed, and verified with a 5-module test. PASS (with caveats below).
-3. **v5.3.1 and v5.3.2 changelogs** — Documented in `EDGE_FUNCTIONS_REGISTRY.md`. PASS.
-4. **Previous bug fixes (BUG-4 through BUG-7)** — All confirmed working via agent tests. PASS.
+**Resultado final:** 25 MCP tools (atualmente 22), 3 novas tabelas, 3 novos arquivos de tool.
 
 ---
 
-## Issues Found
+## Proposta 1: Playbooks como Entidade de Primeira Classe
 
-### Issue 1 (BUG): vault-backfill-diagnose-fields — Dead Client-Side Filter
+### Problema
+Agentes nao tem um roteiro estruturado para iniciar projetos. O campo `module_group` (texto livre) existe em 552 modulos, mas nao possui metadata, ordenacao explicita via junction table, nem suporte a muitos-para-muitos.
 
-**File:** `supabase/functions/vault-backfill-diagnose-fields/index.ts` (lines 126-143)
+### Decisao Arquitetural
 
-**Problem:** The SELECT on line 126 fetches `id, title, code, why_it_matters, usage_hint, tags, description` — but the client-side filter on lines 137-142 references `m.common_errors` and `m.solves_problems`, which are NOT in the SELECT. These will always be `undefined`, making the filter a no-op (all modules pass).
+| Criterio | Solucao A: Tabela Dedicada `vault_playbooks` + Junction | Solucao B: Reaproveitar `module_group` (texto) |
+|---|---|---|
+| Manutenibilidade | 10/10 — modelo relacional normalizado | 7/10 — campo texto nao impoe restricoes |
+| Zero DT | 10/10 — correto desde o dia 1 | 5/10 — precisara migrar para entidade propria |
+| Arquitetura | 10/10 — entidade com metadata, many-to-many | 5/10 — viola normalizacao |
+| Escalabilidade | 10/10 — versioning, permissoes, cross-domain | 4/10 — sem many-to-many |
+| Seguranca | 10/10 — RLS padrao, owner-scoped | 8/10 |
+| **NOTA FINAL** | **10.0/10** | **5.7/10** |
 
-The `ModuleRow` interface (lines 22-30) also omits these fields, confirming the type mismatch.
+**DECISAO: Solucao A (10.0/10)**
 
-**Impact:** The PostgREST `.or("common_errors.is.null,common_errors.eq.[]")` filter on line 128 partially compensates, but:
-- Modules with non-null `common_errors` but empty `solves_problems` are NOT caught by the server filter
-- The client-side filter was intended as a safety net but is dead code
+### O Que Sera Criado
 
-**Root Cause:** Architectural oversight — the SELECT and the filter were written independently without verifying column alignment.
+**Tabela `vault_playbooks`:**
+```text
+id          UUID PK (gen_random_uuid)
+user_id     UUID FK auth.users NOT NULL
+title       TEXT NOT NULL
+slug        TEXT UNIQUE NOT NULL
+description TEXT
+domain      vault_domain (enum)
+tags        TEXT[]
+difficulty  TEXT
+status      TEXT ('draft','published') DEFAULT 'draft'
+created_at  TIMESTAMPTZ
+updated_at  TIMESTAMPTZ
+```
 
-**Fix:**
-- Add `common_errors, solves_problems` to the SELECT query
-- Add `common_errors` and `solves_problems` to the `ModuleRow` interface
-- Remove the server-side `.or()` filter (redundant with a correct client-side filter) OR fix the server-side filter to also cover `solves_problems`
+**Tabela `vault_playbook_modules` (junction):**
+```text
+id           UUID PK
+playbook_id  UUID FK vault_playbooks ON DELETE CASCADE
+module_id    UUID FK vault_modules ON DELETE CASCADE
+position     INTEGER NOT NULL
+notes        TEXT
+UNIQUE(playbook_id, module_id)
+```
 
-### Issue 2 (BUG): vault-backfill-diagnose-fields — Missing Sentry Wrapper
+**Nova MCP Tool: `devvault_get_playbook`** (Tool 23)
+- Sem parametros: lista todos os playbooks publicados com contagem de modulos
+- Com `slug` ou `id`: retorna playbook completo com todos os modulos em ordem, codigo completo, `database_schema` agregado, `ai_metadata` agregado (npm_dependencies, env_vars), e checklist de implementacao
+- Arquivo: `supabase/functions/_shared/mcp-tools/get-playbook.ts`
 
-**File:** `supabase/functions/vault-backfill-diagnose-fields/index.ts` (line 102)
-
-**Problem:** Uses bare `Deno.serve(async (req) => {...})` instead of `Deno.serve(withSentry("vault-backfill-diagnose-fields", async (req) => {...}))`. Every other non-utility edge function in the project uses `withSentry` for error tracking. This is an inconsistency that could mask runtime errors during a 500+ module backfill.
-
-**Fix:** Import `withSentry` from `../_shared/sentry.ts` and wrap the handler.
-
-### Issue 3 (DOC): EDGE_FUNCTIONS_REGISTRY.md — Count Mismatch
-
-**File:** `docs/EDGE_FUNCTIONS_REGISTRY.md` (lines 15, 19, 74, 79, 90)
-
-**Problem:** Multiple references still say "16 functions" or "16 config.toml entries" despite the addition of `vault-backfill-diagnose-fields` making it 17 total:
-- Badge line 15: `17 Edge Functions` — CORRECT
-- Badge line 19: `verify_jwt: false (ALL 16 functions)` — WRONG, should be 17
-- Summary line 79: `config.toml entries: 16` — WRONG, should be 17
-- Line 90: `All 16 functions use verify_jwt = false` — WRONG, should be 17
-
-**Fix:** Update all occurrences of "16" to "17" in the badge and summary section.
-
----
-
-## Backfill Data Status
-
-- **Total global modules:** 578
-- **Modules with common_errors populated:** 5 (from test run)
-- **Modules still needing backfill:** 573
-- The backfill function works but has not been run at full scale yet
-
----
-
-## Protocol Compliance Check (Section 3 / Section 4)
-
-| Criterion | Status |
-|---|---|
-| Zero Remendos (4.1) | Issue 1 is dead code, not a band-aid — but it needs root-cause fix |
-| Arquiteto Antes de Pedreiro (4.2) | The SELECT/filter mismatch shows code was written before verifying data flow |
-| MVP Arquitetural (4.3) | The overall architecture is sound |
-| Divida Tecnica Zero (4.4) | 3 issues above constitute minor technical debt |
-| Code Hygiene (5.4) | File is 211 lines, under 300 limit. PASS |
-| Clean Architecture (5.3) | Single Responsibility maintained. PASS |
+**Melhoria em `devvault_bootstrap`:**
+- Adicionar secao `playbooks_index` listando todos playbooks publicados com slug, titulo, contagem de modulos e dominio
 
 ---
 
-## Execution Plan
+## Proposta 2: Integracao de Database Schema
 
-### 1. Fix vault-backfill-diagnose-fields (Issues 1 + 2)
+### Problema
+O campo `database_schema` existe em `vault_modules` mas esta vazio em todos os 613+ modulos globais. Modulos de backend sem schema SQL deixam agentes sem saber qual `CREATE TABLE` executar.
 
-- Add `common_errors, solves_problems` to SELECT query
-- Add both fields to `ModuleRow` interface
-- Improve server-side filter: `.or("common_errors.is.null,common_errors.eq.[],solves_problems.is.null,solves_problems.eq.{}")`
-- Wrap handler with `withSentry`
+### Decisao Arquitetural
 
-### 2. Fix documentation counts (Issue 3)
+| Criterio | Solucao A: Validacao Mandatoria Inteligente | Solucao B: Validacao "Recomendada" (soft) |
+|---|---|---|
+| Manutenibilidade | 10/10 — regras claras, sem ambiguidade | 7/10 — warnings sao ignorados |
+| Zero DT | 10/10 — validacao correta desde o dia 1 | 6/10 — modulos incompletos acumulam |
+| Arquitetura | 10/10 — deteccao domain-aware e tag-aware | 6/10 — validacao opcional e covarde |
+| Escalabilidade | 10/10 — novos modulos validados automaticamente | 5/10 — schemas nao-validados multiplicam |
+| Seguranca | 9/10 — schemas documentados reduzem misconfiguracao | 7/10 |
+| **NOTA FINAL** | **9.8/10** | **6.2/10** |
 
-- Update badge: "ALL 16 functions" to "ALL 17 functions"
-- Update summary: "config.toml entries" from 16 to 17
-- Update text: "All 16 functions" to "All 17 functions"
+**DECISAO: Solucao A (9.8/10)**
 
-### Files Affected
+### O Que Sera Modificado
+
+**`validate.ts`** — Adicionar verificacao inteligente:
+- Se `domain` e `backend` ou `architecture` E (`tags` ou `code` contem indicadores de DB: `supabase`, `postgres`, `sql`, `rls`, `migration`, `create table`, `.from(`, `.rpc(`), entao `database_schema` e campo OBRIGATORIO
+- Ausencia reduz score em 15 pontos
+- Resposta explicita: `"database_schema: REQUIRED (DB-interacting module)"`
+
+**`get-playbook.ts`** — Agregar todos os `database_schema` dos modulos do playbook em `_combined_migration`, ordenado por `position`
+
+**Backfill** — Sera executado como Phase 5 (pos-deploy), similar ao `vault-backfill-diagnose-fields`. Tarefa separada.
+
+---
+
+## Proposta 3: Loop de Feedback de Tarefas de Agentes
+
+### Problema
+A tabela `vault_usage_events` rastreia uso de ferramentas, mas nao o *contexto* da tarefa do agente. Nao sabemos o objetivo, se teve sucesso, ou quais modulos realmente resolveram o problema.
+
+### Decisao Arquitetural
+
+| Criterio | Solucao A: Entidade Dedicada `vault_agent_tasks` | Solucao B: Enriquecer `vault_usage_events` com session_id |
+|---|---|---|
+| Manutenibilidade | 10/10 — modelo de lifecycle limpo | 5/10 — sobrecarrega tabela existente |
+| Zero DT | 10/10 — feature nova, sem retrofitting | 4/10 — schema change em tabela existente |
+| Arquitetura | 10/10 — entidade propria com state machine | 3/10 — viola SRP |
+| Escalabilidade | 10/10 — suporta analytics e ML | 5/10 — queries complexas com dados mistos |
+| Seguranca | 10/10 — user-scoped via RLS | 8/10 |
+| **NOTA FINAL** | **10.0/10** | **4.8/10** |
+
+**DECISAO: Solucao A (10.0/10)**
+
+### O Que Sera Criado
+
+**Tabela `vault_agent_tasks`:**
+```text
+id              UUID PK (gen_random_uuid)
+user_id         UUID FK auth.users NOT NULL
+api_key_id      UUID nullable
+objective       TEXT NOT NULL
+status          TEXT NOT NULL CHECK ('active','success','failure','abandoned')
+modules_used    UUID[] DEFAULT '{}'
+context         JSONB DEFAULT '{}'
+started_at      TIMESTAMPTZ DEFAULT now()
+completed_at    TIMESTAMPTZ nullable
+duration_ms     INTEGER nullable
+outcome_notes   TEXT nullable
+```
+
+**Nova MCP Tool: `devvault_task_start`** (Tool 24)
+- Input: `objective` (obrigatorio), `context` (JSONB opcional)
+- Output: `task_id` UUID
+- Auto-vincula `user_id` e `api_key_id` do contexto de auth
+- Arquivo: `supabase/functions/_shared/mcp-tools/task-start.ts`
+
+**Nova MCP Tool: `devvault_task_end`** (Tool 25)
+- Input: `task_id` (obrigatorio), `status` (obrigatorio), `modules_used` (UUID[] opcional), `outcome_notes` (opcional)
+- Computa `duration_ms` automaticamente
+- Arquivo: `supabase/functions/_shared/mcp-tools/task-end.ts`
+
+---
+
+## Sequencia de Execucao
 
 ```text
-supabase/functions/vault-backfill-diagnose-fields/index.ts  -- Fix: SELECT + types + Sentry
-docs/EDGE_FUNCTIONS_REGISTRY.md                             -- Fix: 16 -> 17 counts
+Phase 1 — Schema (Migracoes SQL)
+  1. Criar tabela vault_playbooks + RLS
+  2. Criar tabela vault_playbook_modules (junction) + RLS
+  3. Criar tabela vault_agent_tasks + RLS
+
+Phase 2 — Novas MCP Tools (3 arquivos)
+  4. Criar get-playbook.ts (devvault_get_playbook)
+  5. Criar task-start.ts (devvault_task_start)
+  6. Criar task-end.ts (devvault_task_end)
+
+Phase 3 — Melhorias em Tools Existentes
+  7. validate.ts — deteccao inteligente de database_schema
+  8. bootstrap.ts — AGENT_GUIDE (25 tools), playbooks_index, task workflow
+  9. usage-tracker.ts — novos event_types (get_playbook, task_start, task_end)
+
+Phase 4 — Wiring + Documentacao
+  10. register.ts — 3 novos registros (25 tools total)
+  11. devvault-mcp/index.ts — docstring (25 tools)
+  12. EDGE_FUNCTIONS_REGISTRY.md — contagens + documentacao das novas tools
+
+Phase 5 — Populacao de Dados (pos-deploy)
+  13. Backfill database_schema para modulos relevantes
+  14. Criar playbooks iniciais a partir dos module_groups existentes
 ```
+
+## Arquivos
+
+### Criar (3)
+```text
+supabase/functions/_shared/mcp-tools/get-playbook.ts
+supabase/functions/_shared/mcp-tools/task-start.ts
+supabase/functions/_shared/mcp-tools/task-end.ts
+```
+
+### Modificar (6)
+```text
+supabase/functions/_shared/mcp-tools/register.ts       — 3 novos registros
+supabase/functions/_shared/mcp-tools/bootstrap.ts       — AGENT_GUIDE rewrite (25 tools)
+supabase/functions/_shared/mcp-tools/validate.ts        — validacao inteligente DB schema
+supabase/functions/_shared/mcp-tools/usage-tracker.ts   — novos event_types
+supabase/functions/devvault-mcp/index.ts                — docstring (25 tools)
+docs/EDGE_FUNCTIONS_REGISTRY.md                         — contagens + novas tools
+```
+
+### Checkpoint de Qualidade (Secao 6.2 do Protocolo)
+
+| Pergunta | Resposta |
+|---|---|
+| Esta e a MELHOR solucao possivel? | Sim — modelo relacional normalizado, entidades dedicadas, zero atalhos |
+| Existe solucao com nota maior? | Nao — todas as escolhidas pontuaram 9.8-10.0 |
+| Isso cria divida tecnica? | Zero — cada entidade e normalizada corretamente |
+| Precisaremos "melhorar depois"? | Nao — a arquitetura suporta V2 e V3 |
+| O codigo sobrevive 10 anos? | Sim — padroes relacionais com lifecycle models claros |
+| Alguma escolha foi por velocidade? | Nao — a tabela de playbooks foi escolhida SOBRE a abordagem mais rapida com module_group |
 
