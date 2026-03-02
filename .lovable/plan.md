@@ -1,223 +1,140 @@
 
+# Phase 6 Audit Report — Validation and Corrections
 
-# Phase 6 — Diagnose and Validation Quality (Revised: True 10/10)
-
-## Why the Previous Plan Was a 9, Not a 10
-
-The previous plan had a fundamental architectural flaw that I initially tolerated: **it kept the wrong layer doing the heavy lifting.**
+## Audit Summary
 
 ```text
-CURRENT ARCHITECTURE (9/10):
-  Edge Function (JS) fetches N modules → iterates in-memory → matches strings
-
-  Problems:
-  - .limit(50) or .limit(200) is a MAGIC NUMBER — arbitrary ceiling
-  - JS does string matching on data that LIVES IN POSTGRES
-  - Adding domain inference keywords requires CODE DEPLOYMENT
-  - At 700 modules it works; at 70,000 it collapses
-```
-
-```text
-10/10 ARCHITECTURE:
-  Postgres does ALL matching via SQL functions → Edge Function only orchestrates
-
-  Why:
-  - ZERO arbitrary limits — Postgres checks ALL rows natively
-  - String matching on JSONB is what Postgres was BUILT for
-  - Domain keywords live in a DB table — no deployment needed
-  - Scales to millions of modules without code changes
+AUDIT RESULTS:
+  Dead Code:         PASS — Zero legacy JS functions remain
+  SQL Functions:     BUG FOUND — vault_module_completeness has v_total error
+  Domain Inference:  PASS — "RLS recursion" correctly infers "security"
+  Frontend Scores:   PASS — database_schema excluded from missing_fields
+  Documentation:     STALE — Registry missing Phase 6, version not bumped
+  Protocol Sec 4:    VIOLATION — Latent bug = architectural flaw allowed
 ```
 
 ---
 
-## The Core Insight
+## Findings
 
-Strategies 1 (common_errors) and 2 (solves_problems) currently:
-1. Fetch N modules into JS memory (arbitrary limit)
-2. Loop through each module's JSONB/array fields
-3. Do string comparison in JavaScript
+### FINDING 1 (CRITICAL): vault_module_completeness v_total miscalculation
 
-This is **using JavaScript as a database engine**. It is architecturally wrong. Postgres has JSONB operators, `ILIKE`, `ANY()`, and full-text search that do this faster, without limits, and at the data layer where the data lives.
+The SQL function has a latent bug that violates Protocol Section 4.4 (Zero Technical Debt):
+
+```text
+CURRENT LOGIC:
+  v_total := 12 (base for non-grouped)
+
+  Bonus fields checked and added to v_filled:
+    common_errors  (+1)
+    test_code      (+1)
+    solves_problems (+1)
+    database_schema (+1 IF backend/architecture/security)
+
+  Problem: v_total is NEVER incremented to account for bonus fields.
+  It "works" by coincidence: 9 core fields + 3 bonus = 12 = v_total.
+  But when v_needs_db_schema = true, 9 + 3 + 1 = 13 fields are checked
+  against v_total = 12.
+
+  Result: A fully-filled backend module would score 13*100/12 = 108%.
+  This hasn't manifested yet because no backend module has ALL fields
+  filled, but it is a ticking architectural bomb.
+```
+
+Root cause: The `IF NOT v_needs_db_schema THEN NULL; END IF;` block has no `ELSE` clause to increment `v_total`. The original migration created a correct-by-coincidence function instead of a correct-by-design function.
+
+### FINDING 2 (DOCUMENTATION): Registry missing Phase 6
+
+`docs/EDGE_FUNCTIONS_REGISTRY.md` has a `v5.5 Changelog` for Phase 5A but NO entry for Phase 6. The three new SQL functions (`match_common_errors`, `match_solves_problems`, `infer_domain_from_text`), the `domain_inference_keywords` table, and the `vault_module_completeness` domain-aware update are undocumented.
+
+### FINDING 3 (VERSION): devvault-mcp version stale
+
+`devvault-mcp/index.ts` line 59 still reads `version: "5.4.0"`. After Phase 5A (v5.5) and Phase 6, this should be bumped to reflect the current state.
+
+### FINDING 4 (PROTOCOL): register.ts missing blank line
+
+`register.ts` line 37-38: missing blank line between last import and `export function`. Minor hygiene issue per Protocol 5.4 (Code Hygiene).
 
 ---
 
-## Revised Solution Analysis
+## Confirmed PASS items
 
-### Solution B (Previous): Increase limits + JS-based inferDomain
-- Manutenibilidade: 9/10 — inferDomain map hardcoded in TS, requires deployment to update
-- Zero DT: 9/10 — .limit(200) is still a magic number, will need increasing as data grows
-- Arquitetura: 9/10 — JS doing string matching on data that lives in Postgres = wrong layer
-- Escalabilidade: 9/10 — in-memory iteration doesn't scale past thousands
-- Seguranca: 10/10
-- **NOTA FINAL: 9.2/10**
-
-### Solution C (Revised): SQL-native matching + DB-stored domain inference
-- Manutenibilidade: 10/10 — domain keywords in DB table, matching logic in SQL functions, zero hardcoded maps
-- Zero DT: 10/10 — no magic numbers, no arbitrary limits, no "increase later"
-- Arquitetura: 10/10 — each layer does what it was designed for (Postgres matches data, JS orchestrates)
-- Escalabilidade: 10/10 — SQL functions scale with Postgres indexes, not JS memory
-- Seguranca: 10/10
-- **NOTA FINAL: 10.0/10**
-
-### Why Solution B is Inferior
-Increasing `.limit(50)` to `.limit(200)` is a band-aid with a larger bandage. It will need to be 500 next year, then 1000. The JS string matching loop is the wrong abstraction — we're reimplementing SQL `ILIKE` in JavaScript. The hardcoded domain inference map requires a code deployment to add a keyword. All three issues stem from the same root cause: **logic that belongs in Postgres is running in JavaScript.**
+| Check | Status | Evidence |
+| :--- | :--- | :--- |
+| Dead code (matchCommonErrors JS) | PASS | `grep` returns 0 matches in supabase/functions |
+| Dead code (matchSolvesProblems JS) | PASS | `grep` returns 0 matches in supabase/functions |
+| diagnose-troubleshoot.ts header | PASS | Accurately describes SQL-native architecture |
+| Domain inference | PASS | `infer_domain_from_text('RLS recursion...')` returns 'security' |
+| Frontend score fix | PASS | Frontend modules show no `database_schema` in missing_fields |
+| Backend score penalty | PASS | Backend modules correctly show `database_schema` in missing_fields |
+| domain_inference_keywords seeded | PASS | 55 keywords across 5 domains verified |
+| extractKeywords function | PASS | Still needed for Strategy 5 (tag matching) |
+| Protocol 5.5 (Zero DB from frontend) | PASS | diagnose-troubleshoot.ts only runs in Edge Functions |
 
 ---
 
-## Implementation Plan
+## Correction Plan
 
-### Step 1 — Create SQL function `match_common_errors`
+### Fix 1 — Rewrite vault_module_completeness with explicit v_total
 
-New Postgres function that replaces the JS `matchCommonErrors`:
-
-```sql
-CREATE OR REPLACE FUNCTION match_common_errors(
-  p_error_text TEXT,
-  p_domain TEXT DEFAULT NULL,
-  p_limit INT DEFAULT 10
-) RETURNS TABLE(
-  id UUID, slug TEXT, title TEXT, domain TEXT,
-  matched_error TEXT, quick_fix TEXT, error_cause TEXT,
-  difficulty TEXT, estimated_minutes INT
-)
-```
-
-Logic: Uses `jsonb_array_elements` to unnest `common_errors`, then `ILIKE` to match against the error text. **No arbitrary fetch limit** — Postgres scans all modules with non-null `common_errors` using its own query optimizer and indexes.
-
-### Step 2 — Create SQL function `match_solves_problems`
-
-Replaces JS `matchSolvesProblems`:
-
-```sql
-CREATE OR REPLACE FUNCTION match_solves_problems(
-  p_error_text TEXT,
-  p_tokens TEXT[] DEFAULT '{}',
-  p_domain TEXT DEFAULT NULL,
-  p_limit INT DEFAULT 10
-) RETURNS TABLE(
-  id UUID, slug TEXT, title TEXT, domain TEXT,
-  matched_problem TEXT, match_quality TEXT,
-  difficulty TEXT, estimated_minutes INT
-)
-```
-
-Logic: Uses `unnest(solves_problems)` + `ILIKE` for exact substring match (high relevance), then token overlap via `array_length(ARRAY(SELECT ... WHERE problem ILIKE '%' || token || '%'), 1) >= 2` for partial match.
-
-### Step 3 — Create table `domain_inference_keywords`
-
-```sql
-CREATE TABLE domain_inference_keywords (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  keyword TEXT NOT NULL UNIQUE,
-  domain TEXT NOT NULL,
-  priority INT DEFAULT 1,
-  created_at TIMESTAMPTZ DEFAULT now()
-);
-```
-
-Populated with ~50 initial keywords:
-- security: rls, row level security, policy, security definer, jwt, auth, rbac, csrf, xss, permission
-- backend: edge function, supabase, database, migration, trigger, postgres, sql, rpc, webhook, api, cors, deno
-- frontend: react, component, hook, useState, useEffect, tailwind, css, render, jsx, tsx, router
-- architecture: clean architecture, solid, dependency injection, repository pattern
-- devops: docker, ci, cd, deploy, pipeline, github actions, vercel
-
-New SQL function:
-
-```sql
-CREATE OR REPLACE FUNCTION infer_domain_from_text(p_text TEXT)
-RETURNS TEXT
-```
-
-Logic: Counts keyword matches per domain from the table, returns the domain with the most hits. Returns NULL if no matches — preserving current behavior (no filter applied).
-
-Adding a new keyword = one INSERT. Zero deployments.
-
-### Step 4 — Rewrite `diagnose-troubleshoot.ts`
-
-The file becomes an **orchestrator** instead of a matching engine:
+SQL migration that replaces the function with correct-by-design v_total calculation:
 
 ```text
-BEFORE (current):
-  handleTroubleshooting:
-    1. extractKeywords (JS)
-    2. matchCommonErrors: fetch 50 modules → JS loop → string match
-    3. matchSolvesProblems: fetch 50 modules → JS loop → string match
-    4. matchResolvedGaps: DB query (already correct)
-    5. hybridSearchFallback: DB RPC (already correct)
-    6. matchByTags: DB query + JS loop
-    → merge + sort + return
+v_total calculation (explicit):
+  Start with 9 (core fields: title, description, why_it_matters, code,
+                code_example, context_markdown, tags, slug, domain)
+  + 1 if grouped non-root (dependencies)
+  + 1 (common_errors — always counted)
+  + 1 (test_code — always counted)
+  + 1 (solves_problems — always counted)
+  + 1 if v_needs_db_schema (database_schema — conditional)
 
-AFTER (revised):
-  handleTroubleshooting:
-    1. infer domain: client.rpc('infer_domain_from_text', { p_text: errorMsg })
-    2. client.rpc('match_common_errors', { p_error_text, p_domain })
-    3. client.rpc('match_solves_problems', { p_error_text, p_tokens, p_domain })
-    4. matchResolvedGaps: DB query (unchanged)
-    5. hybridSearchFallback: DB RPC (unchanged, now receives inferred domain)
-    6. matchByTags: DB query (unchanged, now receives inferred domain)
-    → merge + sort + return
+  Non-grouped frontend: 9 + 3 = 12
+  Non-grouped backend:  9 + 3 + 1 = 13
+  Grouped non-root frontend: 9 + 1 + 3 = 13
+  Grouped non-root backend:  9 + 1 + 3 + 1 = 14
 ```
 
-The file shrinks significantly. The `matchCommonErrors` and `matchSolvesProblems` JS functions are **deleted entirely** — their logic now lives in Postgres where it belongs. The `extractKeywords` function stays (used by Strategy 5 tag matching which is already DB-driven, just needs tokens). The `inferDomain` function is removed from JS — it's a DB function now.
+This eliminates the coincidence-based correctness. Every field that can be checked is explicitly counted in `v_total`.
 
-### Step 5 — Update `vault_module_completeness` (SQL)
+### Fix 2 — Update EDGE_FUNCTIONS_REGISTRY.md
 
-Add domain-aware logic: `database_schema` only penalizes when `domain IN ('backend', 'architecture', 'security')`.
+Add `v6.0 Changelog` entry documenting:
+- Phase 6: SQL-native diagnose architecture
+- New SQL functions: `match_common_errors`, `match_solves_problems`, `infer_domain_from_text`
+- New table: `domain_inference_keywords`
+- Updated: `vault_module_completeness` (domain-aware database_schema)
+- Updated: `diagnose-troubleshoot.ts` refactored from matching engine to orchestrator
 
-For `frontend`, `devops`, `saas_playbook`: the field is excluded from both `v_total` and `v_missing`.
+### Fix 3 — Bump devvault-mcp version
 
-Impact: ~380 frontend/devops modules gain ~7 points each. Scores stop being uniformly 61.
+Update `devvault-mcp/index.ts` version from `5.4.0` to `6.0.0`.
 
-### Step 6 — Deploy and Verify
+### Fix 4 — register.ts hygiene
 
-- Deploy SQL migration (4 new functions + 1 table + 1 altered function)
-- Deploy `devvault-mcp`
-- Test `devvault_diagnose` with "RLS recursion infinite loop" — must return security/backend modules first
-- Test `devvault_validate` on frontend module — `database_schema` must NOT appear in `missing_fields`
-- Verify backend module still penalizes missing `database_schema`
-
----
-
-## Files
-
-### Create (1 SQL migration)
-```text
-supabase/migrations/XXXXXX_diagnose_sql_functions.sql
-  - CREATE FUNCTION match_common_errors(...)
-  - CREATE FUNCTION match_solves_problems(...)
-  - CREATE TABLE domain_inference_keywords + seed data
-  - CREATE FUNCTION infer_domain_from_text(...)
-  - ALTER FUNCTION vault_module_completeness(...) — domain-aware database_schema
-```
-
-### Modify (1 file)
-```text
-supabase/functions/_shared/mcp-tools/diagnose-troubleshoot.ts
-  - Delete matchCommonErrors JS function
-  - Delete matchSolvesProblems JS function
-  - Replace with client.rpc() calls
-  - Add inferred domain logic at top of handleTroubleshooting
-  - Keep extractKeywords, matchResolvedGaps, matchByTags, hybridSearchFallback
-```
-
-### Deploy (1)
-```text
-devvault-mcp
-```
+Add blank line between last import and export function.
 
 ---
 
 ## Execution Sequence
 
 ```text
-1. Create SQL migration with all 4 functions + 1 table + completeness fix
-2. Seed domain_inference_keywords table (~50 keywords)
-3. Rewrite diagnose-troubleshoot.ts as orchestrator
-4. Deploy devvault-mcp
-5. Test diagnose: "RLS recursion" → must prioritize security
-6. Test diagnose: "React hook" → must prioritize frontend
-7. Test validate: frontend module → database_schema not penalized
-8. Test validate: backend module → database_schema still penalized
+1. SQL migration: Replace vault_module_completeness with explicit v_total
+2. Update EDGE_FUNCTIONS_REGISTRY.md with v6.0 changelog
+3. Bump devvault-mcp version to 6.0.0
+4. Fix register.ts blank line
+5. Deploy devvault-mcp
+6. Verify: backend fully-filled module scores exactly 100 (not 108)
+7. Verify: frontend scores unchanged
 ```
 
+---
+
+## Protocol Section 4 Compliance Check
+
+| Rule | Status | Notes |
+| :--- | :--- | :--- |
+| 4.1 Zero Remendos | FIX NEEDED | v_total bug is a latent architectural flaw |
+| 4.2 Arquiteto Antes de Pedreiro | PASS | SQL-native architecture is correct design |
+| 4.3 MVP Arquitetural | PASS | Foundation supports growth without rewrites |
+| 4.4 Divida Tecnica Zero | FIX NEEDED | Coincidence-based math = technical debt |
