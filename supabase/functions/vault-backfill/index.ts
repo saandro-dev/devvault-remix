@@ -22,6 +22,7 @@ import { diagnoseFieldsStrategy } from "../_shared/backfill-strategies/diagnose-
 import { contextFieldsStrategy } from "../_shared/backfill-strategies/context-fields.ts";
 import { changelogSeedStrategy } from "../_shared/backfill-strategies/changelog-seed.ts";
 import { embeddingsStrategy } from "../_shared/backfill-strategies/embeddings.ts";
+import { autoDependenciesStrategy } from "../_shared/backfill-strategies/auto-dependencies.ts";
 
 interface StrategyEntry {
   // deno-lint-ignore no-explicit-any
@@ -34,6 +35,7 @@ const STRATEGY_MAP: Record<string, StrategyEntry> = {
   "context-fields": { strategy: contextFieldsStrategy, config: DEFAULT_AI_CONFIG },
   "changelog-seed": { strategy: changelogSeedStrategy, config: DEFAULT_DATA_CONFIG },
   "embeddings": { strategy: embeddingsStrategy, config: DEFAULT_AI_CONFIG },
+  "auto-dependencies": { strategy: autoDependenciesStrategy, config: DEFAULT_DATA_CONFIG },
 };
 
 Deno.serve(withSentry("vault-backfill", async (req: Request) => {
