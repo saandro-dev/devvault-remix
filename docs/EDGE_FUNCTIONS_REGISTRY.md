@@ -12,7 +12,7 @@
 ╔═══════════════════════════════════════════════════════════════╗
 ║  ✅ DEVVAULT PROTOCOL V2 - 10.0/10 - DUAL-AUTH ARCHITECTURE   ║
 ║     17 Edge Functions | 2 Auth Systems | Zero Legacy Code      ║
-║     MCP Server v5.3: 22 Tools | Knowledge Flywheel + Tree     ║
+║     MCP Server v5.4: 25 Tools | Knowledge Flywheel + Tree     ║
 ║     Phase 3: Hybrid Search (pgvector + tsvector + pg_trgm)     ║
 ║     Runtime: 100% Deno.serve() native                         ║
 ║     Secrets: Supabase Vault + Multi-Domain Keys               ║
@@ -22,6 +22,23 @@
 ```
 
 ---
+
+## v5.4 Changelog (2026-03-02)
+
+### New MCP Tools (+3, total 25)
+- **devvault_get_playbook (Tool 23):** Fetches curated playbooks — ordered sequences of modules with full code, aggregated `database_schema` as `_combined_migration`, aggregated `ai_metadata` (npm_dependencies, env_vars), and implementation checklist. List mode (no params) returns all published playbooks with module counts.
+- **devvault_task_start (Tool 24):** Starts tracking a high-level agent task. Records `objective`, `context`, and returns a `task_id` for lifecycle tracking.
+- **devvault_task_end (Tool 25):** Ends an active task with `status` (success/failure/abandoned), `modules_used`, and `outcome_notes`. Auto-computes `duration_ms`.
+
+### New Tables (+3)
+- **vault_playbooks:** Curated playbook entity with title, slug, domain, tags, difficulty, status (draft/published). RLS: owner + published visibility.
+- **vault_playbook_modules:** Junction table linking playbooks to modules with explicit `position` ordering and per-module `notes`.
+- **vault_agent_tasks:** Agent task lifecycle tracking with objective, status state machine, modules_used, context JSONB, and duration computation.
+
+### Enhancements
+- **devvault_validate:** Intelligent `database_schema` detection — backend/architecture modules with DB-interaction indicators (`.from(`, `.rpc(`, `supabase`, `sql`, etc.) now get `database_schema` flagged as REQUIRED with a 15-point score reduction if missing.
+- **devvault_bootstrap:** Updated AGENT_GUIDE to 25 tools, added `playbooks_index` section, added task tracking workflow (steps 0 and 9), added `task_tracking` tool category.
+- **usage-tracker:** Added event types: `get_playbook`, `task_start`, `task_end`, `validate`, `validate_batch`.
 
 ## v5.3.2 Changelog (2026-03-02)
 
@@ -123,7 +140,7 @@ To limit the "blast radius" in case of a key leak, the system uses two service k
 | `vault-crud` | Internal (JWT) | general | **Main BFF for the Vault.** Performs all CRUD operations on the user's knowledge modules. **Actions:** `list`, `get`, `create`, `update`, `delete`, `search`, `get_playbook`, `share`, `unshare`, `list_shares`, `add_dependency`, `remove_dependency`, `list_dependencies`. |
 | `vault-query` | External (API Key) | general | **Public READ endpoint for Agents.** Allows external systems to query the knowledge graph. **Actions:** `bootstrap`, `search`, `get`, `list`, `list_domains`. |
 | `vault-ingest` | External (API Key) | general | **Public WRITE endpoint for Agents.** Allows external systems to create, update, and delete modules. **Actions:** `ingest` (single/batch creation), `update`, `delete`. |
-| `devvault-mcp` | External (API Key) | general | **MCP Server (Model Context Protocol) for AI Agents (v5.3).** Exposes a structured API with tools to interact with the Vault. **Tools (22):** `devvault_bootstrap`, `devvault_search`, `devvault_get`, `devvault_list`, `devvault_domains`, `devvault_ingest`, `devvault_update`, `devvault_get_group`, `devvault_validate`, `devvault_delete`, `devvault_diagnose`, `devvault_report_bug`, `devvault_resolve_bug`, `devvault_report_success`, `devvault_export_tree`, `devvault_check_updates`, `devvault_load_context`, `devvault_quickstart`, `devvault_changelog`, `devvault_diary_bug`, `devvault_diary_resolve`, `devvault_diary_list`. **v5.0 Improvements:** `devvault_validate` supports batch mode (no ID = audit all modules). `devvault_export_tree` supports optional ID (no ID = list root modules). `devvault_diagnose` supports health check mode (no params = open gaps + low-score modules). `devvault_list` and `devvault_search` include relation metadata (`has_dependencies`, `is_depended_upon`, `related_modules_count`). **New Tools (v5.0):** `devvault_load_context` loads all modules for a source_project. `devvault_quickstart` returns essential modules per domain ranked by usage. `devvault_changelog` returns version history for modules. **Bug Diary Tools (v5.1):** `devvault_diary_bug` creates entries in the user's personal Bug Diary (`bugs` table) with automatic status resolution (open/resolved based on solution presence). `devvault_diary_resolve` updates an existing bug with cause_code and solution, setting status to resolved. `devvault_diary_list` lists and searches diary entries with filters (status, tags, project, text search) and pagination — enables agents to find bug_ids across sessions and avoid duplicates. All three enforce ownership via `auth.userId`. **Knowledge Flywheel (v4.0):** `devvault_report_bug` registers knowledge gaps with dedup by hit_count, `devvault_resolve_bug` documents solutions and promotes to modules, `devvault_report_success` captures success patterns. `devvault_diagnose` also searches resolved gaps. **Scaffolding (v4.1):** `devvault_export_tree` resolves the full dependency tree with recursive CTE — eliminates N+1. `devvault_check_updates` compares local versions vs vault. Modules include `database_schema` (SQL) and `version` (versioning). |
+| `devvault-mcp` | External (API Key) | general | **MCP Server (Model Context Protocol) for AI Agents (v5.4).** Exposes a structured API with tools to interact with the Vault. **Tools (25):** `devvault_bootstrap`, `devvault_search`, `devvault_get`, `devvault_list`, `devvault_domains`, `devvault_ingest`, `devvault_update`, `devvault_get_group`, `devvault_validate`, `devvault_delete`, `devvault_diagnose`, `devvault_report_bug`, `devvault_resolve_bug`, `devvault_report_success`, `devvault_export_tree`, `devvault_check_updates`, `devvault_load_context`, `devvault_quickstart`, `devvault_changelog`, `devvault_diary_bug`, `devvault_diary_resolve`, `devvault_diary_list`, `devvault_get_playbook`, `devvault_task_start`, `devvault_task_end`. **v5.4 New Tools:** `devvault_get_playbook` (curated playbook sequences with aggregated migrations and dependencies), `devvault_task_start` / `devvault_task_end` (agent task lifecycle tracking with duration, modules_used, and outcome analytics). **v5.4 Enhancements:** `devvault_validate` includes intelligent `database_schema` requirement detection. `devvault_bootstrap` includes `playbooks_index` and task tracking workflow. |
 
 ### Entity Management
 

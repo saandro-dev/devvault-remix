@@ -14,6 +14,77 @@ const logger = createLogger("mcp-tool:validate");
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+// ─── Intelligent DB schema detection ────────────────────────────────────────
+
+const DB_INDICATORS_IN_CODE = [
+  "supabase", "postgres", ".from(", ".rpc(", "create table", "insert into",
+  "alter table", "drop table", "select ", "update ", "delete from",
+  ".select(", ".insert(", ".update(", ".delete(", ".upsert(",
+];
+
+const DB_INDICATORS_IN_TAGS = [
+  "supabase", "postgres", "sql", "rls", "migration", "database",
+  "prisma", "drizzle", "knex", "typeorm",
+];
+
+const DB_RELEVANT_DOMAINS = ["backend", "architecture"];
+
+interface DbSchemaCheckResult {
+  required: boolean;
+  indicators: string[];
+}
+
+async function detectDatabaseSchemaRequirement(
+  client: import("https://esm.sh/@supabase/supabase-js@2").SupabaseClient,
+  moduleId: string,
+): Promise<DbSchemaCheckResult> {
+  const { data } = await client
+    .from("vault_modules")
+    .select("domain, tags, code, database_schema")
+    .eq("id", moduleId)
+    .single();
+
+  if (!data) return { required: false, indicators: [] };
+
+  const mod = data as Record<string, unknown>;
+
+  // Already has database_schema — no issue
+  if (mod.database_schema && (mod.database_schema as string).trim() !== "") {
+    return { required: false, indicators: [] };
+  }
+
+  // Only check for backend/architecture domains
+  if (!DB_RELEVANT_DOMAINS.includes((mod.domain as string) || "")) {
+    return { required: false, indicators: [] };
+  }
+
+  const foundIndicators: string[] = [];
+  const codeLower = ((mod.code as string) || "").toLowerCase();
+  const tags = (mod.tags as string[]) || [];
+
+  // Check code for DB interaction patterns
+  for (const indicator of DB_INDICATORS_IN_CODE) {
+    if (codeLower.includes(indicator)) {
+      foundIndicators.push(`code:"${indicator}"`);
+    }
+  }
+
+  // Check tags for DB-related keywords
+  for (const tag of tags) {
+    const tagLower = tag.toLowerCase();
+    for (const indicator of DB_INDICATORS_IN_TAGS) {
+      if (tagLower.includes(indicator)) {
+        foundIndicators.push(`tag:"${tag}"`);
+      }
+    }
+  }
+
+  return {
+    required: foundIndicators.length > 0,
+    indicators: foundIndicators.slice(0, 5), // Cap at 5 for readability
+  };
+}
+
 export const registerValidateTool: ToolRegistrar = (server, client, auth) => {
   server.tool("devvault_validate", {
     description:
@@ -100,7 +171,22 @@ export const registerValidateTool: ToolRegistrar = (server, client, auth) => {
       }
 
       const completeness = await getCompleteness(client, moduleId);
-      logger.info("module validated via MCP", { moduleId, score: completeness.score });
+
+      // ── Intelligent database_schema detection ──
+      const dbSchemaCheck = await detectDatabaseSchemaRequirement(client, moduleId);
+
+      let adjustedScore = completeness.score;
+      const warnings: string[] = [];
+
+      if (dbSchemaCheck.required && completeness.missing_fields.includes("database_schema")) {
+        adjustedScore = Math.max(0, adjustedScore - 15);
+        warnings.push(
+          `database_schema: REQUIRED (DB-interacting module detected via: ${dbSchemaCheck.indicators.join(", ")}). ` +
+          "Score reduced by 15 points. Add the SQL schema this module needs to function."
+        );
+      }
+
+      logger.info("module validated via MCP", { moduleId, score: adjustedScore, dbRequired: dbSchemaCheck.required });
 
       trackUsage(client, auth, {
         event_type: "validate",
@@ -115,11 +201,15 @@ export const registerValidateTool: ToolRegistrar = (server, client, auth) => {
           text: JSON.stringify({
             mode: "single",
             module_id: moduleId,
-            score: completeness.score,
+            score: adjustedScore,
+            original_score: completeness.score,
             missing_fields: completeness.missing_fields,
-            _hint: completeness.score === 100
+            db_schema_required: dbSchemaCheck.required,
+            db_indicators: dbSchemaCheck.indicators,
+            warnings,
+            _hint: adjustedScore === 100
               ? "Module is 100% complete. Ready to be marked as 'validated'."
-              : `Module is ${completeness.score}% complete. Fill the missing fields using devvault_update to improve quality.`,
+              : `Module is ${adjustedScore}% complete. Fill the missing fields using devvault_update to improve quality.`,
           }, null, 2),
         }],
       };

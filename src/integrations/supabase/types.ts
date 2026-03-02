@@ -412,6 +412,48 @@ export type Database = {
         }
         Relationships: []
       }
+      vault_agent_tasks: {
+        Row: {
+          api_key_id: string | null
+          completed_at: string | null
+          context: Json
+          duration_ms: number | null
+          id: string
+          modules_used: string[]
+          objective: string
+          outcome_notes: string | null
+          started_at: string
+          status: string
+          user_id: string
+        }
+        Insert: {
+          api_key_id?: string | null
+          completed_at?: string | null
+          context?: Json
+          duration_ms?: number | null
+          id?: string
+          modules_used?: string[]
+          objective: string
+          outcome_notes?: string | null
+          started_at?: string
+          status?: string
+          user_id: string
+        }
+        Update: {
+          api_key_id?: string | null
+          completed_at?: string | null
+          context?: Json
+          duration_ms?: number | null
+          id?: string
+          modules_used?: string[]
+          objective?: string
+          outcome_notes?: string | null
+          started_at?: string
+          status?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       vault_knowledge_gaps: {
         Row: {
           context: string | null
@@ -703,6 +745,90 @@ export type Database = {
           version?: string | null
           visibility?: Database["public"]["Enums"]["visibility_level"]
           why_it_matters?: string | null
+        }
+        Relationships: []
+      }
+      vault_playbook_modules: {
+        Row: {
+          created_at: string
+          id: string
+          module_id: string
+          notes: string | null
+          playbook_id: string
+          position: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          module_id: string
+          notes?: string | null
+          playbook_id: string
+          position: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          module_id?: string
+          notes?: string | null
+          playbook_id?: string
+          position?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vault_playbook_modules_module_id_fkey"
+            columns: ["module_id"]
+            isOneToOne: false
+            referencedRelation: "vault_modules"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vault_playbook_modules_playbook_id_fkey"
+            columns: ["playbook_id"]
+            isOneToOne: false
+            referencedRelation: "vault_playbooks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vault_playbooks: {
+        Row: {
+          created_at: string
+          description: string | null
+          difficulty: string | null
+          domain: Database["public"]["Enums"]["vault_domain"] | null
+          id: string
+          slug: string
+          status: string
+          tags: string[]
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          difficulty?: string | null
+          domain?: Database["public"]["Enums"]["vault_domain"] | null
+          id?: string
+          slug: string
+          status?: string
+          tags?: string[]
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          difficulty?: string | null
+          domain?: Database["public"]["Enums"]["vault_domain"] | null
+          id?: string
+          slug?: string
+          status?: string
+          tags?: string[]
+          title?: string
+          updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }
