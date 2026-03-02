@@ -12,6 +12,7 @@ import { getSupabaseClient } from "../_shared/supabase-client.ts";
 import { createSuccessResponse, createErrorResponse, ERROR_CODES } from "../_shared/api-helpers.ts";
 import { handleCorsV2 } from "../_shared/cors-v2.ts";
 import { createLogger } from "../_shared/logger.ts";
+import { withSentry } from "../_shared/sentry.ts";
 
 const logger = createLogger("vault-backfill-diagnose-fields");
 
@@ -27,6 +28,8 @@ interface ModuleRow {
   usage_hint: string | null;
   tags: string[];
   description: string | null;
+  common_errors: unknown;
+  solves_problems: unknown;
 }
 
 interface GeneratedFields {
@@ -99,7 +102,7 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-Deno.serve(async (req: Request) => {
+Deno.serve(withSentry("vault-backfill-diagnose-fields", async (req: Request) => {
   const corsResponse = handleCorsV2(req);
   if (corsResponse) return corsResponse;
 
@@ -123,9 +126,8 @@ Deno.serve(async (req: Request) => {
   // Fetch modules needing backfill
   const { data: modules, error: fetchError } = await supabase
     .from("vault_modules")
-    .select("id, title, code, why_it_matters, usage_hint, tags, description")
+    .select("id, title, code, why_it_matters, usage_hint, tags, description, common_errors, solves_problems")
     .eq("visibility", "global")
-    .or("common_errors.is.null,common_errors.eq.[]")
     .limit(limit);
 
   if (fetchError) {
@@ -208,4 +210,4 @@ Deno.serve(async (req: Request) => {
     failed,
     errors: errors.slice(0, 20), // Cap error list
   });
-});
+}));
