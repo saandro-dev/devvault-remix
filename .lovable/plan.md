@@ -1,172 +1,59 @@
 
 
-# Plano: Backfill de Enriquecimento do Vault — Analise 10/10
+# AUDITORIA DE VALIDACAO — Backfill Engine (Solucao C, Nota 9.8)
 
-## Diagnostico Real do Banco
+## Veredicto: NAO FOI SUCESSO TOTAL
 
-| Campo | Preenchidos | Vazios | % Vazios |
-|:---|:---|:---|:---|
-| `common_errors` | 545 | 158 | 22.5% |
-| `solves_problems` | 545 | 158 | 22.5% |
-| `context_markdown` | 34 | 669 | 95.2% |
-| `test_code` | 0 | 703 | 100% |
-| `vault_module_changelog` | 0 | 703 | 100% |
-
-## Problemas Arquiteturais Identificados no Plano Anterior (8.8)
-
-1. **3 funcoes separadas com 90% de codigo duplicado** — fetch modules, batch loop, delay, dry_run, error handling, progress tracking. Isso e codigo copicola. Viola DRY e SRP.
-2. **Inconsistencia entre backfills existentes** — `vault-backfill-embeddings` nao usa `withSentry`, nao usa `api-helpers`, usa CORS diferente. `vault-backfill-playbooks` usa CORS wildcard. Cada backfill segue um padrao diferente.
-3. **BUG na funcao existente** — `vault-backfill-diagnose-fields` faz `.limit(limit)` sem filtro SQL, depois filtra em JS. A Regra de Ouro diz: Postgres deve fazer a filtragem, nao JS.
-4. **Nenhuma validacao estrutural** — Se a OpenAI retorna JSON malformado para `common_errors` (ex: campo `error` faltando), o backfill salva lixo no banco sem validar cada entry.
-5. **Sem retry em falhas transientes** — Se a OpenAI retorna 429 (rate limit), o modulo e marcado como "failed" e nunca mais e processado. Deveria ter retry com backoff.
-
-## Analise de Solucoes
-
-### Solucao A: 3 Edge Functions Separadas (Plano Anterior)
-- Manutenibilidade: 6/10 — 3 funcoes com codigo duplicado; mudar o batch logic = alterar 3 arquivos
-- Zero DT: 5/10 — Bug no filtro JS nao corrigido; sem retry; sem validacao estrutural
-- Arquitetura: 5/10 — Viola DRY; cada backfill segue padrao diferente
-- Escalabilidade: 7/10 — Funciona para 703 modulos mas o batch loop e identico em cada uma
-- Seguranca: 9/10 — Service role only
-- **NOTA FINAL: 6.2/10**
-
-### Solucao B: 1 Edge Function Unificada com Pipeline Modular
-- Uma unica funcao `vault-backfill` com `action` parameter
-- Shared helper `_shared/backfill-engine.ts` extrai TODA a logica reutilizavel (batch loop, retry, delay, progress tracking, dry_run)
-- Cada "enrichment" e um modulo puro: recebe 1 modulo, retorna campos gerados
-- Retry com exponential backoff em erros 429/500
-- Validacao estrutural de cada campo gerado antes de salvar
-- Filtro SQL-native (IS NULL) ao inves de filtro JS
-- Padrao unico: `withSentry` + `api-helpers` + `cors-v2`
-
-- Manutenibilidade: 10/10 — 1 engine, N enrichments. Adicionar novo campo = 1 modulo de 30 linhas
-- Zero DT: 10/10 — Bug corrigido, retry implementado, validacao estrutural
-- Arquitetura: 10/10 — Engine/Strategy pattern. SRP por camada. DRY total
-- Escalabilidade: 9/10 — Engine reutilizavel para qualquer backfill futuro
-- Seguranca: 9/10 — Service role only
-- **NOTA FINAL: 9.8/10**
-
-### Solucao C: Solucao B + Refatorar os 3 backfills existentes para usar o mesmo engine
-- Tudo de B + migrar `vault-backfill-embeddings`, `vault-backfill-diagnose-fields`, e `vault-backfill-playbooks` para o engine unificado
-- Eliminar as 3 funcoes existentes e substituir por uma unica `vault-backfill`
-
-- Manutenibilidade: 10/10 — Zero duplicacao no projeto inteiro
-- Zero DT: 10/10 — Corrige bugs em TODAS as funcoes, nao so nas novas
-- Arquitetura: 10/10 — Uma unica interface para todo tipo de backfill
-- Escalabilidade: 10/10 — Qualquer backfill futuro = 1 strategy module
-- Seguranca: 9/10 — Service role only
-- **NOTA FINAL: 9.8/10** (empate com B — mais abrangente)
-
-### DECISAO: Solucao C (Nota 9.8, mais abrangente)
-
-Em caso de empate, o protocolo diz: "escolher a mais abrangente". Solucao C elimina a inconsistencia dos 3 backfills existentes E resolve o problema atual. E a unica que zera divida tecnica de verdade.
+A implementacao do engine e das 4 strategies esta arquiteturalmente correta e segue o protocolo. Porem, a LIMPEZA foi incompleta. Ha codigo morto, documentacao desatualizada, e duas violacoes da Secao 4 (Vibe Coding / Anti-Reativo) que devem ser corrigidas antes de considerar a tarefa finalizada.
 
 ---
 
-## Arquitetura da Solucao C
+## PROBLEMAS ENCONTRADOS (7)
+
+### PROBLEMA 1 (P0 — Codigo Morto no config.toml)
+
+**Arquivo:** `supabase/config.toml`
+**Linhas:** 54-55 e 57-58
+
+O plano mandava REMOVER `[functions.vault-backfill-diagnose-fields]` do config.toml. A entrada ainda esta presente na linha 54. Alem disso, `[functions.vault-backfill-playbooks]` aparece DUPLICADA (linhas 51-52 e 57-58).
 
 ```text
-supabase/functions/
-  _shared/
-    backfill-engine.ts          (NOVO — core engine reutilizavel)
-    backfill-strategies/        (NOVO — pasta com estrategias)
-      diagnose-fields.ts        (gera common_errors + solves_problems)
-      context-fields.ts         (gera context_markdown + test_code)
-      changelog-seed.ts         (seed v1 no changelog — sem IA)
-      embeddings.ts             (gera embedding via OpenAI)
-  vault-backfill/
-    index.ts                    (NOVO — unico entry point para todos os backfills)
+Estado atual (ERRADO):
+  Linha 48: [functions.vault-backfill]         <-- OK
+  Linha 51: [functions.vault-backfill-playbooks] <-- OK
+  Linha 54: [functions.vault-backfill-diagnose-fields] <-- MORTO (funcao deletada)
+  Linha 57: [functions.vault-backfill-playbooks] <-- DUPLICATA
 ```
 
-### Backfill Engine (`_shared/backfill-engine.ts`)
+**Impacto:** Referencia a funcao que nao existe mais. Entrada duplicada.
+**Correcao:** Remover linhas 54-58 inteiras.
 
-```text
-Interface BackfillStrategy<TRow, TResult>:
-  name: string
-  fetchCandidates(client, limit): Promise<TRow[]>     // SQL-native filtering
-  process(row: TRow): Promise<TResult>                 // gera dados (IA ou puro)
-  validate(result: TResult): boolean                   // valida estrutura antes de salvar
-  persist(client, rowId, result): Promise<void>        // salva no banco
+---
 
-Interface BackfillConfig:
-  batchSize: number
-  delayMs: number
-  maxRetries: number       // retry com exponential backoff
-  retryBaseMs: number
+### PROBLEMA 2 (P0 — Documentacao Desatualizada: EDGE_FUNCTIONS_REGISTRY.md)
 
-Funcao runBackfill(strategy, config, options):
-  1. strategy.fetchCandidates() com filtro SQL-native (nao JS)
-  2. Para cada batch:
-     a. Promise.allSettled(batch.map(row => processWithRetry(row)))
-     b. Para cada resultado fulfilled:
-        - strategy.validate(result) → se false, marca como failed com motivo
-        - strategy.persist(client, row.id, result)
-     c. Delay entre batches
-  3. Retorna { processed, failed, errors, duration_ms }
+**Arquivo:** `docs/EDGE_FUNCTIONS_REGISTRY.md`
 
-Funcao processWithRetry(strategy, row, maxRetries):
-  - Tenta strategy.process(row)
-  - Se erro 429: exponential backoff (1s, 2s, 4s)
-  - Se erro 500: retry 1x
-  - Se erro estrutural: nao retry (falha permanente)
-```
+A documentacao oficial ainda lista as funcoes deletadas como se existissem:
 
-### Entry Point (`vault-backfill/index.ts`)
+1. **Linha 9:** Badge diz "18 Edge Functions" — agora sao 16 (removemos 2, nao adicionamos nenhuma nova separada; `vault-backfill` substituiu `vault-backfill-diagnose-fields` e `vault-backfill-embeddings`)
+2. **Linha 124-133:** Tabela Summary diz "Total Functions: 18" — deveria ser 16
+3. **Linha 130:** "Utility Functions (One-shot): 3" — agora sao 2 (`vault-backfill` + `vault-backfill-playbooks`)
+4. **Linha 140:** "All 17 functions" — numero errado
+5. **Linhas 210-211:** Listam `vault-backfill-embeddings` e `vault-backfill-diagnose-fields` como funcoes separadas existentes
+6. **A funcao unificada `vault-backfill` NAO esta documentada no registry** — zero mensal sobre ela, suas 4 actions, ou o backfill engine
 
-```text
-POST { action: "diagnose-fields", limit?: 200, dry_run?: false }
-POST { action: "context-fields",  limit?: 100, dry_run?: false }
-POST { action: "changelog-seed",  limit?: 1000, dry_run?: false }
-POST { action: "embeddings",      limit?: 100, dry_run?: false }
+**Impacto:** Documentacao contradiz a realidade. Viola Secao 5.4 (Higiene de Codigo) e Secao 6.1 passo 5 ("Atualizar documentacao se aplicavel").
+**Correcao:** Reescrever a secao Utilities do registry. Atualizar contadores. Documentar `vault-backfill` com suas 4 actions. Remover entradas mortas.
 
-Usa withSentry + api-helpers + cors-v2 (padrao correto)
-Seleciona a strategy pelo action, chama runBackfill()
-```
+---
 
-### Strategy: diagnose-fields.ts
+### PROBLEMA 3 (P1 — Violacao Secao 4: Filtro JS no changelog-seed.ts)
 
-```text
-fetchCandidates: SQL com filtro direto
-  WHERE visibility = 'global'
-    AND (common_errors IS NULL OR common_errors::text = '[]'
-         OR solves_problems IS NULL OR array_length(solves_problems, 1) IS NULL)
-  LIMIT p_limit
+**Arquivo:** `supabase/functions/_shared/backfill-strategies/changelog-seed.ts`
+**Linhas:** 27-46
 
-process: chama OpenAI gpt-4o-mini (prompt existente)
-
-validate: verifica que:
-  - common_errors e array
-  - cada entry tem campos error, cause, fix (todos strings nao-vazias)
-  - solves_problems e array de strings
-  - cada problema tem pelo menos 10 chars
-
-persist: UPDATE vault_modules SET common_errors, solves_problems WHERE id
-```
-
-### Strategy: context-fields.ts
-
-```text
-fetchCandidates: SQL com filtro direto
-  WHERE visibility = 'global'
-    AND (context_markdown IS NULL OR trim(context_markdown) = ''
-         OR test_code IS NULL OR trim(test_code) = '')
-  LIMIT p_limit
-
-process: chama OpenAI gpt-4o-mini com prompt especializado:
-  - context_markdown: Overview, How it Works, When to Use, When NOT to Use,
-    Considerations. 300-600 palavras
-  - test_code: snippet de validacao rapida (5-15 linhas) na linguagem do modulo
-
-validate: verifica que:
-  - context_markdown tem pelo menos 200 chars
-  - context_markdown contem pelo menos 2 headers markdown (##)
-  - test_code tem pelo menos 3 linhas
-  - test_code nao contem "TODO" ou placeholder
-
-persist: UPDATE vault_modules SET context_markdown, test_code WHERE id
-```
-
-### Strategy: changelog-seed.ts
+O plano identificou EXPLICITAMENTE que "Postgres deve fazer a filtragem, nao JS" como um bug da implementacao anterior. O plano especificava:
 
 ```text
 fetchCandidates: SQL com LEFT JOIN
@@ -174,98 +61,189 @@ fetchCandidates: SQL com LEFT JOIN
   FROM vault_modules vm
   LEFT JOIN vault_module_changelog vmc ON vmc.module_id = vm.id
   WHERE vm.visibility = 'global' AND vmc.id IS NULL
-  LIMIT p_limit
-
-process: retorna dados puros (SEM IA)
-  { version: mod.version ?? "v1", changes: ["Initial version published to global vault"] }
-
-validate: sempre true (dados deterministicos)
-
-persist: INSERT INTO vault_module_changelog (module_id, version, changes)
-
-batchSize: 50 (sem IA, pode ser maior)
-delayMs: 0 (sem rate limit externo)
 ```
 
-### Strategy: embeddings.ts
+A implementacao REAL faz:
 
-```text
-fetchCandidates:
-  WHERE visibility = 'global' AND embedding IS NULL LIMIT p_limit
-
-process: buildEmbeddingInput() + generateEmbedding() (reutiliza _shared/embedding-client.ts)
-
-validate: verifica que embedding.length === 1536
-
-persist: UPDATE vault_modules SET embedding WHERE id
+```typescript
+// Fetch ALL global modules
+const modules = await client.from("vault_modules").select(...).eq("visibility", "global").limit(limit);
+// Fetch ALL changelog entries
+const existingLogs = await client.from("vault_module_changelog").select("module_id");
+// Filter in JS
+return modules.filter(m => !existingIds.has(m.id));
 ```
 
-### Funcoes Antigas a Deletar
+Isso e EXATAMENTE o bug que o plano condenava: fetch tudo, filtrar em JS. A justificativa de "PostgREST can't do LEFT JOIN" e valida, mas a solucao correta (que o plano ja previa) e criar uma RPC SQL que faz o LEFT JOIN nativamente. Criar um `fetchCandidates` que faz 2 queries separadas e filtra em JS e um band-aid — viola Secao 4.1 (Zero Remendos).
 
-Apos deploy e validacao do `vault-backfill`:
-- `supabase/functions/vault-backfill-diagnose-fields/` → deletar
-- `supabase/functions/vault-backfill-embeddings/` → deletar
-- `supabase/functions/vault-backfill-playbooks/` → manter (logica diferente — cria playbooks, nao enriquece modulos)
+**Impacto:** Com 703+ modulos e 703+ changelog entries, faz 2 full scans e filtra em memoria. Alem disso, o `.select("module_id")` no changelog vai bater o limite de 1000 rows do Supabase quando houver mais de 1000 changelogs.
+**Correcao:** Criar RPC `fetch_modules_without_changelog(p_limit)` que faz o LEFT JOIN nativo.
 
-**Nota:** `vault-backfill-playbooks` NAO e um backfill de campos. E uma funcao que cria entidades (playbooks) a partir de module_groups. Nao se encaixa no pattern BackfillStrategy porque o output nao e um UPDATE em vault_modules. Ela fica como esta, mas deve ser refatorada para usar `withSentry` + `api-helpers` + `cors-v2` em vez de CORS wildcard.
+---
 
-## config.toml
+### PROBLEMA 4 (P1 — Violacao Secao 4: Filtro JS no context-fields.ts)
 
-Adicionar:
-```toml
-[functions.vault-backfill]
-verify_jwt = false
+**Arquivo:** `supabase/functions/_shared/backfill-strategies/context-fields.ts`
+**Linhas:** 46-53
+
+Apos o fetch com `.or("context_markdown.is.null,test_code.is.null")`, a strategy faz um SEGUNDO filtro em JS para verificar strings vazias:
+
+```typescript
+.filter((m) => {
+  const needsContext = !m.context_markdown || m.context_markdown.trim() === "";
+  const needsTest = !m.test_code || m.test_code.trim() === "";
+  return needsContext || needsTest;
+})
 ```
 
-Remover (apos validacao):
-```toml
-[functions.vault-backfill-diagnose-fields]
-[functions.vault-backfill-embeddings]
+O PostgREST suporta `or` com `eq.` para strings vazias. A query correta seria:
+```
+.or("context_markdown.is.null,context_markdown.eq.,test_code.is.null,test_code.eq.")
 ```
 
-## Correcao do vault-backfill-playbooks (Higiene)
+Ou, melhor: uma RPC SQL que faz `WHERE trim(context_markdown) = '' OR context_markdown IS NULL`.
 
-Refatorar para usar `withSentry` + `api-helpers` + `cors-v2` em vez de CORS wildcard. Mesma logica, padrao correto.
+**Impacto:** Filtro JS desnecessario. Menor que o P3 pois o filtro SQL ja reduz a maioria dos candidatos, mas ainda viola o principio.
+**Correcao:** Mover o filtro de empty string para a query PostgREST ou criar RPC.
 
-## Ordem de Execucao
+---
 
-```text
-1. Criar _shared/backfill-engine.ts (engine reutilizavel)
-2. Criar _shared/backfill-strategies/ (4 strategies)
-3. Criar vault-backfill/index.ts (entry point unificado)
-4. Atualizar config.toml
-5. Refatorar vault-backfill-playbooks (padrao correto)
-6. Deletar vault-backfill-diagnose-fields/
-7. Deletar vault-backfill-embeddings/
-8. Deploy e teste
-9. Executar: changelog-seed (rapido, sem IA)
-10. Executar: diagnose-fields (158 modulos, ~5min)
-11. Executar: context-fields (703 modulos, ~30-45min)
+### PROBLEMA 5 (P2 — Type Safety Escape: `as any` no vault-backfill/index.ts)
+
+**Arquivo:** `supabase/functions/vault-backfill/index.ts`
+**Linha:** 68-69
+
+```typescript
+// deno-lint-ignore no-explicit-any
+const result = await runBackfill(client, strategy as any, config, { limit, dryRun });
 ```
 
-## Resumo de Arquivos
+O `as any` existe porque `STRATEGY_MAP` e `as const`, o que torna o tipo da strategy um union type incompativel com o generico `BackfillStrategy<TRow, TResult>`. A correcao correta e tipar o mapa sem `as const` ou usar uma funcao helper que preserva o tipo.
 
-| Arquivo | Acao | Linhas |
+**Impacto:** Perde type safety na chamada mais critica do sistema. Se alguem mudar a interface de uma strategy, o TypeScript nao vai avisar.
+**Correcao:** Remover `as const` do `STRATEGY_MAP` e tipar explicitamente como `Record<string, { strategy: BackfillStrategy<any, any>; config: BackfillConfig }>`, ou usar um wrapper tipado.
+
+---
+
+### PROBLEMA 6 (P2 — Plan.md Desatualizado)
+
+**Arquivo:** `.lovable/plan.md`
+
+O plan.md ainda referencia as funcoes deletadas no futuro ("Apos deploy e validacao do vault-backfill: deletar vault-backfill-diagnose-fields, deletar vault-backfill-embeddings"). Como a acao ja foi executada, o plano esta desatualizado. Deveria refletir o estado ATUAL, nao o estado planejado.
+
+**Impacto:** Confusao para quem consultar o plano.
+**Correcao:** Atualizar para refletir que as funcoes ja foram deletadas e o deploy foi feito.
+
+---
+
+### PROBLEMA 7 (P3 — Supabase 1000-row Limit no changelog-seed.ts)
+
+**Arquivo:** `supabase/functions/_shared/backfill-strategies/changelog-seed.ts`
+**Linha:** 38-39
+
+```typescript
+const { data: existingLogs, error: logErr } = await client
+  .from("vault_module_changelog")
+  .select("module_id");
+```
+
+Nenhum `.limit()` especificado. O Supabase tem limite default de 1000 rows. Quando houver mais de 1000 changelog entries, esta query vai retornar apenas 1000, e o filtro JS vai erroneamente marcar modulos como "sem changelog" quando na verdade tem. Resultado: insercoes duplicadas.
+
+**Impacto:** Bug latente que vai explodir quando o sistema crescer.
+**Correcao:** Parte da correcao do Problema 3 (RPC SQL elimina ambos os problemas).
+
+---
+
+## CHECKLIST DO PLANO vs REALIDADE
+
+| Item do Plano | Status | Problema |
 |:---|:---|:---|
-| `supabase/functions/_shared/backfill-engine.ts` | Criar | ~120 |
-| `supabase/functions/_shared/backfill-strategies/diagnose-fields.ts` | Criar | ~100 |
-| `supabase/functions/_shared/backfill-strategies/context-fields.ts` | Criar | ~120 |
-| `supabase/functions/_shared/backfill-strategies/changelog-seed.ts` | Criar | ~50 |
-| `supabase/functions/_shared/backfill-strategies/embeddings.ts` | Criar | ~50 |
-| `supabase/functions/vault-backfill/index.ts` | Criar | ~80 |
-| `supabase/functions/vault-backfill-playbooks/index.ts` | Refatorar | ~260 (padrao correto) |
-| `supabase/config.toml` | Editar | +3, -6 |
-| `supabase/functions/vault-backfill-diagnose-fields/` | Deletar | — |
-| `supabase/functions/vault-backfill-embeddings/` | Deletar | — |
+| Criar `_shared/backfill-engine.ts` | OK | Nenhum |
+| Criar `_shared/backfill-strategies/diagnose-fields.ts` | OK | Nenhum |
+| Criar `_shared/backfill-strategies/context-fields.ts` | PARCIAL | P4: filtro JS |
+| Criar `_shared/backfill-strategies/changelog-seed.ts` | PARCIAL | P3: filtro JS + P7: 1000-row limit |
+| Criar `_shared/backfill-strategies/embeddings.ts` | OK | Nenhum |
+| Criar `vault-backfill/index.ts` | PARCIAL | P5: `as any` |
+| Refatorar `vault-backfill-playbooks` | OK | Nenhum |
+| Atualizar `config.toml` | FALHOU | P1: entrada morta + duplicata |
+| Deletar `vault-backfill-diagnose-fields/` | OK | Diretorio removido |
+| Deletar `vault-backfill-embeddings/` | OK | Diretorio removido |
+| Atualizar documentacao | FALHOU | P2: registry desatualizado |
 
-## Impacto Final
+---
 
-| Metrica | Antes | Depois |
+## VALIDACAO PROTOCOLO SECAO 4
+
+| Regra | Status | Evidencia |
 |:---|:---|:---|
-| Edge Functions de backfill | 3 (inconsistentes) | 1 unificada + 1 playbooks (padronizada) |
-| Codigo duplicado | ~300 linhas em 3 funcoes | 0 (engine reutilizavel) |
-| Bug de filtro JS | Presente | Corrigido (SQL-native) |
-| Retry em rate limit | Nenhum | Exponential backoff |
-| Validacao estrutural | Nenhuma | Cada campo validado antes de salvar |
-| Adicionar novo backfill | Copiar 200 linhas + novo arquivo | 1 strategy de 30-50 linhas |
+| 4.1 Zero Remendos | VIOLADO | P3 e P4: filtro JS em vez de SQL-native. O plano identificou isso como bug e a implementacao repetiu o mesmo padrao. |
+| 4.2 Arquiteto Antes de Pedreiro | OK | Engine/Strategy pattern e arquiteturalmente solido |
+| 4.3 MVP Arquitetural | OK | Engine suporta N strategies futuras sem reescrita |
+| 4.4 Divida Tecnica Zero | VIOLADO | P7: bug latente do 1000-row limit. P5: `as any` perde type safety |
+
+---
+
+## PLANO DE CORRECAO (Ordem de Prioridade)
+
+### 1. Criar RPC `fetch_modules_without_changelog` (corrige P3 + P7)
+
+```sql
+CREATE OR REPLACE FUNCTION public.fetch_modules_without_changelog(p_limit integer DEFAULT 1000)
+RETURNS TABLE(id uuid, title text, version text, created_at timestamptz)
+LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public'
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT vm.id, vm.title, vm.version, vm.created_at
+  FROM vault_modules vm
+  LEFT JOIN vault_module_changelog vmc ON vmc.module_id = vm.id
+  WHERE vm.visibility = 'global' AND vmc.id IS NULL
+  LIMIT p_limit;
+END;
+$$;
+```
+
+Atualizar `changelog-seed.ts` para chamar `client.rpc('fetch_modules_without_changelog', { p_limit: limit })`.
+
+### 2. Corrigir context-fields.ts (corrige P4)
+
+Mover filtro de empty string para a query PostgREST:
+```
+.or("context_markdown.is.null,context_markdown.eq.,test_code.is.null,test_code.eq.")
+```
+Remover o `.filter()` em JS.
+
+### 3. Limpar config.toml (corrige P1)
+
+Remover linhas 54-58 (entrada morta `vault-backfill-diagnose-fields` + duplicata `vault-backfill-playbooks`).
+
+### 4. Atualizar EDGE_FUNCTIONS_REGISTRY.md (corrige P2)
+
+- Atualizar contadores para 16 funcoes
+- Remover entradas de `vault-backfill-embeddings` e `vault-backfill-diagnose-fields`
+- Documentar `vault-backfill` com suas 4 actions (diagnose-fields, context-fields, changelog-seed, embeddings)
+- Adicionar changelog v6.1 sobre a unificacao
+
+### 5. Remover `as any` do vault-backfill/index.ts (corrige P5)
+
+Tipar `STRATEGY_MAP` sem `as const` ou usar wrapper.
+
+### 6. Atualizar plan.md (corrige P6)
+
+Marcar acoes como concluidas em vez de pendentes.
+
+---
+
+## RESUMO
+
+| Categoria | Resultado |
+|:---|:---|
+| Arquitetura do Engine | 10/10 — Strategy pattern impecavel |
+| Arquitetura das Strategies | 8/10 — 2 strategies com filtro JS (viola Secao 4) |
+| Limpeza de Codigo Morto | 5/10 — config.toml com entradas fantasma |
+| Documentacao | 3/10 — Registry completamente desatualizado |
+| Type Safety | 7/10 — `as any` no entry point |
+| Conformidade Protocolo Secao 4 | PARCIAL — 2 violacoes de "Zero Remendos" |
+
+**Conclusao:** A FUNDACAO esta correta (engine + strategies + entry point + playbooks refatorado). Mas a HIGIENE falhou. Sao 7 problemas concretos, dos quais 2 sao P0 (devem ser corrigidos antes de qualquer execucao de backfill) e 2 sao P1 (violam a Secao 4 do protocolo). O plano de correcao acima resolve todos os 7 problemas.
 
