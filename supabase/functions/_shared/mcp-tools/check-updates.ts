@@ -12,6 +12,11 @@ import type { ToolRegistrar } from "./types.ts";
 
 const logger = createLogger("mcp-tool:check-updates");
 
+/** Strips leading "v"/"V" prefix and trims whitespace for consistent comparison. */
+function normalizeVersion(v: string): string {
+  return v.replace(/^v/i, "").trim();
+}
+
 interface ModuleVersionInput {
   slug: string;
   version: string;
@@ -103,7 +108,7 @@ export const registerCheckUpdatesTool: ToolRegistrar = (server, client, auth) =>
         }
 
         const vaultVersion = (vaultMod.version as string) ?? "v1";
-        const needsUpdate = vaultVersion !== mod.version;
+        const needsUpdate = normalizeVersion(vaultVersion) !== normalizeVersion(mod.version);
 
         if (needsUpdate) {
           outdatedIds.push(vaultMod.id as string);
