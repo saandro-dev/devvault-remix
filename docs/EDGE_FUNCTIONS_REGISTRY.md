@@ -1,7 +1,7 @@
 # DevVault - Edge Functions Registry
 
 > **🔴 SINGLE SOURCE OF TRUTH** - This document lists ALL 16 Edge Functions deployed on Supabase for the DevVault project.
-> Last updated: 2026-02-28
+> Last updated: 2026-03-02
 > Maintainer: AI Architect
 
 ---
@@ -22,6 +22,16 @@
 ```
 
 ---
+
+## v5.3.1 Changelog (2026-03-02)
+
+### Critical Bug Fixes
+- **BUG-4 (P0):** Fixed `devvault_get` and `devvault_validate` — added missing `database_schema` column to `vault_modules` table. The `get_vault_module` and `vault_module_completeness` RPCs referenced this column but it did not exist, causing all module fetches and validations to fail.
+- **BUG-5 (P0):** Created `export_module_tree` RPC with recursive CTE (max depth 10) for `devvault_export_tree` full tree mode. Previously the RPC did not exist.
+
+### Minor Bug Fixes
+- **BUG-6 (P1):** Fixed `devvault_check_updates` version comparison — added `normalizeVersion()` to strip "v" prefix before comparison. "v1" vs "1" no longer triggers false `needs_update: true`.
+- **BUG-7 (P1):** Fixed `devvault_export_tree` discovery mode returning 0 root modules — replaced in-memory filtering of last 20 modules with SQL-based root identification (modules depended upon but having no dependencies themselves).
 
 ## v5.3 Changelog (2026-02-28)
 
