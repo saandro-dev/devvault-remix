@@ -78,14 +78,14 @@
   "auth": {
     "login": "Log In",
     "loginTitle": "DevVault",
-    "loginSubtitle": "Sign in to access your vault",
+    "loginSubtitle": "Sign in to manage your AI knowledge base",
     "loginFailed": "Login failed",
     "invalidCredentials": "Invalid email or password.",
     "forgotPassword": "Forgot password?",
     "noAccount": "Don't have an account?",
     "createAccount": "Create Account",
     "signupTitle": "Create Account",
-    "signupSubtitle": "Start organizing your technical knowledge",
+    "signupSubtitle": "Build the knowledge base for your AI agents",
     "signupFailed": "Signup failed",
     "accountCreated": "Account created!",
     "checkEmail": "Check your email to confirm registration.",
@@ -116,7 +116,7 @@
 
   "dashboard": {
     "title": "Dashboard",
-    "subtitle": "Overview of your DevVault.",
+    "subtitle": "Monitor your AI knowledge base activity.",
     "projects": "Projects",
     "vaultModules": "Vault Modules",
     "apiKeys": "API Keys",

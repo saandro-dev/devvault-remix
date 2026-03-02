@@ -78,14 +78,14 @@
   "auth": {
     "login": "Entrar",
     "loginTitle": "DevVault",
-    "loginSubtitle": "Entre na sua conta para acessar seu cofre",
+    "loginSubtitle": "Entre para gerenciar sua base de conhecimento para IAs",
     "loginFailed": "Falha no login",
     "invalidCredentials": "Email ou senha incorretos.",
     "forgotPassword": "Esqueceu a senha?",
     "noAccount": "Não tem conta?",
     "createAccount": "Criar conta",
     "signupTitle": "Criar Conta",
-    "signupSubtitle": "Comece a organizar seu conhecimento técnico",
+    "signupSubtitle": "Construa a base de conhecimento para seus agentes de IA",
     "signupFailed": "Falha no cadastro",
     "accountCreated": "Conta criada!",
     "checkEmail": "Verifique seu email para confirmar o cadastro.",
@@ -116,7 +116,7 @@
 
   "dashboard": {
     "title": "Dashboard",
-    "subtitle": "Visão geral do seu DevVault.",
+    "subtitle": "Monitore a atividade da sua base de conhecimento para IAs.",
     "projects": "Projetos",
     "vaultModules": "Módulos no Cofre",
     "apiKeys": "API Keys",
