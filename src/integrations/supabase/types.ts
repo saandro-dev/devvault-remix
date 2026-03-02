@@ -583,6 +583,7 @@ export type Database = {
           common_errors: Json | null
           context_markdown: string | null
           created_at: string
+          database_schema: string | null
           dependencies: string | null
           description: string | null
           difficulty: string | null
@@ -625,6 +626,7 @@ export type Database = {
           common_errors?: Json | null
           context_markdown?: string | null
           created_at?: string
+          database_schema?: string | null
           dependencies?: string | null
           description?: string | null
           difficulty?: string | null
@@ -667,6 +669,7 @@ export type Database = {
           common_errors?: Json | null
           context_markdown?: string | null
           created_at?: string
+          database_schema?: string | null
           dependencies?: string | null
           description?: string | null
           difficulty?: string | null
@@ -761,6 +764,7 @@ export type Database = {
         Args: { p_key_id: string; p_user_id: string }
         Returns: boolean
       }
+      export_module_tree: { Args: { p_root_id: string }; Returns: Json }
       get_domain_counts: {
         Args: { p_scope?: string; p_user_id: string }
         Returns: {

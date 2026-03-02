@@ -36,46 +36,88 @@ export const registerExportTreeTool: ToolRegistrar = (server, client, auth) => {
       if (!params.id) {
         const limit = Math.min(Number(params.limit ?? 20), 50);
 
-        // Root modules: have dependents (someone depends on them) but no dependencies themselves
+        // Step 1: Find all module IDs that are depended upon (they appear as depends_on_id)
+        const { data: depended, error: depErr } = await client
+          .from("vault_module_dependencies")
+          .select("depends_on_id");
+
+        if (depErr) {
+          return { content: [{ type: "text", text: `Error: ${depErr.message}` }] };
+        }
+
+        const dependedOnIds = new Set(
+          (depended as Array<{ depends_on_id: string }> ?? []).map((d) => d.depends_on_id),
+        );
+
+        if (dependedOnIds.size === 0) {
+          trackUsage(client, auth, {
+            event_type: "export_tree_roots",
+            tool_name: "devvault_export_tree",
+            result_count: 0,
+          });
+
+          return {
+            content: [{
+              type: "text",
+              text: JSON.stringify({
+                mode: "discovery",
+                total_root_modules: 0,
+                root_modules: [],
+                _hint: "No dependency relationships found. Use devvault_list to browse modules.",
+              }, null, 2),
+            }],
+          };
+        }
+
+        // Step 2: Of those, find which ones have NO dependencies themselves (true roots)
+        const { data: hasOwnDeps } = await client
+          .from("vault_module_dependencies")
+          .select("module_id")
+          .in("module_id", Array.from(dependedOnIds));
+
+        const modulesWithDeps = new Set(
+          (hasOwnDeps as Array<{ module_id: string }> ?? []).map((d) => d.module_id),
+        );
+
+        const rootIds = Array.from(dependedOnIds).filter((id) => !modulesWithDeps.has(id));
+
+        if (rootIds.length === 0) {
+          trackUsage(client, auth, {
+            event_type: "export_tree_roots",
+            tool_name: "devvault_export_tree",
+            result_count: 0,
+          });
+
+          return {
+            content: [{
+              type: "text",
+              text: JSON.stringify({
+                mode: "discovery",
+                total_root_modules: 0,
+                root_modules: [],
+                _hint: "All depended-upon modules also have their own dependencies (circular or deep chains). Try devvault_list.",
+              }, null, 2),
+            }],
+          };
+        }
+
+        // Step 3: Fetch the actual root modules
         const { data: roots, error } = await client
           .from("vault_modules")
           .select(`
             id, slug, title, description, domain, module_type,
             module_group, implementation_order, validation_status
           `)
+          .in("id", rootIds.slice(0, limit))
           .eq("visibility", "global")
           .in("validation_status", ["validated", "draft"])
-          .order("updated_at", { ascending: false })
-          .limit(limit);
+          .order("updated_at", { ascending: false });
 
         if (error) {
           return { content: [{ type: "text", text: `Error: ${error.message}` }] };
         }
 
-        // Filter: only modules that ARE depended upon but don't depend on others
-        const moduleIds = (roots as Array<{ id: string }>).map((r) => r.id);
-
-        const [{ data: dependents }, { data: dependencies }] = await Promise.all([
-          client
-            .from("vault_module_dependencies")
-            .select("depends_on_id")
-            .in("depends_on_id", moduleIds),
-          client
-            .from("vault_module_dependencies")
-            .select("module_id")
-            .in("module_id", moduleIds),
-        ]);
-
-        const hasDependents = new Set(
-          (dependents as Array<{ depends_on_id: string }> ?? []).map((d) => d.depends_on_id),
-        );
-        const hasDependencies = new Set(
-          (dependencies as Array<{ module_id: string }> ?? []).map((d) => d.module_id),
-        );
-
-        const rootModules = (roots as Array<Record<string, unknown>>).filter(
-          (m) => hasDependents.has(m.id as string) && !hasDependencies.has(m.id as string),
-        );
+        const rootModules = (roots ?? []) as Array<Record<string, unknown>>;
 
         trackUsage(client, auth, {
           event_type: "export_tree_roots",
