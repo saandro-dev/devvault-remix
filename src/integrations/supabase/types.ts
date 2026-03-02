@@ -238,6 +238,30 @@ export type Database = {
         }
         Relationships: []
       }
+      domain_inference_keywords: {
+        Row: {
+          created_at: string | null
+          domain: string
+          id: string
+          keyword: string
+          priority: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          domain: string
+          id?: string
+          keyword: string
+          priority?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          domain?: string
+          id?: string
+          keyword?: string
+          priority?: number | null
+        }
+        Relationships: []
+      }
       favorites: {
         Row: {
           created_at: string
@@ -1012,6 +1036,7 @@ export type Database = {
           why_it_matters: string
         }[]
       }
+      infer_domain_from_text: { Args: { p_text: string }; Returns: string }
       is_admin_or_owner: { Args: { _user_id: string }; Returns: boolean }
       list_vault_domains: {
         Args: never
@@ -1019,6 +1044,38 @@ export type Database = {
           domain: string
           module_types: string[]
           total: number
+        }[]
+      }
+      match_common_errors: {
+        Args: { p_domain?: string; p_error_text: string; p_limit?: number }
+        Returns: {
+          difficulty: string
+          domain: string
+          error_cause: string
+          estimated_minutes: number
+          id: string
+          matched_error: string
+          quick_fix: string
+          slug: string
+          title: string
+        }[]
+      }
+      match_solves_problems: {
+        Args: {
+          p_domain?: string
+          p_error_text: string
+          p_limit?: number
+          p_tokens?: string[]
+        }
+        Returns: {
+          difficulty: string
+          domain: string
+          estimated_minutes: number
+          id: string
+          match_quality: string
+          matched_problem: string
+          slug: string
+          title: string
         }[]
       }
       query_vault_modules: {
