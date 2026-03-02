@@ -17,19 +17,24 @@ import { handleCorsV2, createSuccessResponse, createErrorResponse, ERROR_CODES }
 import { withSentry } from "../_shared/sentry.ts";
 import { getSupabaseClient } from "../_shared/supabase-client.ts";
 import { runBackfill, DEFAULT_AI_CONFIG, DEFAULT_DATA_CONFIG } from "../_shared/backfill-engine.ts";
+import type { BackfillStrategy, BackfillConfig } from "../_shared/backfill-engine.ts";
 import { diagnoseFieldsStrategy } from "../_shared/backfill-strategies/diagnose-fields.ts";
 import { contextFieldsStrategy } from "../_shared/backfill-strategies/context-fields.ts";
 import { changelogSeedStrategy } from "../_shared/backfill-strategies/changelog-seed.ts";
 import { embeddingsStrategy } from "../_shared/backfill-strategies/embeddings.ts";
 
-const STRATEGY_MAP = {
+interface StrategyEntry {
+  // deno-lint-ignore no-explicit-any
+  strategy: BackfillStrategy<any, any>;
+  config: BackfillConfig;
+}
+
+const STRATEGY_MAP: Record<string, StrategyEntry> = {
   "diagnose-fields": { strategy: diagnoseFieldsStrategy, config: DEFAULT_AI_CONFIG },
   "context-fields": { strategy: contextFieldsStrategy, config: DEFAULT_AI_CONFIG },
   "changelog-seed": { strategy: changelogSeedStrategy, config: DEFAULT_DATA_CONFIG },
   "embeddings": { strategy: embeddingsStrategy, config: DEFAULT_AI_CONFIG },
-} as const;
-
-type ActionName = keyof typeof STRATEGY_MAP;
+};
 
 Deno.serve(withSentry("vault-backfill", async (req: Request) => {
   const corsResponse = handleCorsV2(req);
@@ -62,11 +67,10 @@ Deno.serve(withSentry("vault-backfill", async (req: Request) => {
     );
   }
 
-  const { strategy, config } = STRATEGY_MAP[action as ActionName];
+  const { strategy, config } = STRATEGY_MAP[action];
   const client = getSupabaseClient("general");
 
-  // deno-lint-ignore no-explicit-any
-  const result = await runBackfill(client, strategy as any, config, { limit, dryRun });
+  const result = await runBackfill(client, strategy, config, { limit, dryRun });
 
   return createSuccessResponse(req, result);
 }));

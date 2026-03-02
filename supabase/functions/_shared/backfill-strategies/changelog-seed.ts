@@ -1,8 +1,8 @@
 /**
  * changelog-seed strategy — Creates initial "v1" changelog entries.
  *
- * Pure data operation (no AI). Uses LEFT JOIN to only fetch modules
- * that have zero changelog records. Idempotent and re-runnable.
+ * Pure data operation (no AI). Uses SQL RPC with LEFT JOIN to only
+ * fetch modules that have zero changelog records. Idempotent and re-runnable.
  */
 
 import type { BackfillStrategy } from "../backfill-engine.ts";
@@ -24,26 +24,12 @@ export const changelogSeedStrategy: BackfillStrategy<ChangelogRow, ChangelogResu
   name: "changelog-seed",
 
   async fetchCandidates(client: SupabaseClient, limit: number): Promise<ChangelogRow[]> {
-    // Use RPC or raw query to do LEFT JOIN — PostgREST can't do LEFT JOIN natively.
-    // Instead, fetch all global modules and existing changelog module_ids, then diff.
-    const { data: modules, error: modErr } = await client
-      .from("vault_modules")
-      .select("id, title, version, created_at")
-      .eq("visibility", "global")
-      .limit(limit);
+    const { data, error } = await client.rpc("fetch_modules_without_changelog", {
+      p_limit: limit,
+    });
 
-    if (modErr) throw modErr;
-    if (!modules || modules.length === 0) return [];
-
-    const { data: existingLogs, error: logErr } = await client
-      .from("vault_module_changelog")
-      .select("module_id");
-
-    if (logErr) throw logErr;
-
-    const existingIds = new Set((existingLogs ?? []).map((l: { module_id: string }) => l.module_id));
-
-    return (modules as ChangelogRow[]).filter((m) => !existingIds.has(m.id));
+    if (error) throw error;
+    return (data ?? []) as ChangelogRow[];
   },
 
   async process(row: ChangelogRow): Promise<ChangelogResult> {

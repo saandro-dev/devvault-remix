@@ -1,6 +1,6 @@
 # DevVault - Edge Functions Registry
 
-> **🔴 SINGLE SOURCE OF TRUTH** - This document lists ALL 18 Edge Functions deployed on Supabase for the DevVault project.
+> **🔴 SINGLE SOURCE OF TRUTH** - This document lists ALL 16 Edge Functions deployed on Supabase for the DevVault project.
 > Last updated: 2026-03-02
 > Maintainer: AI Architect
 
@@ -11,16 +11,53 @@
 ```
 ╔═══════════════════════════════════════════════════════════════╗
 ║  ✅ DEVVAULT PROTOCOL V2 - 10.0/10 - DUAL-AUTH ARCHITECTURE   ║
-║     18 Edge Functions | 2 Auth Systems | Zero Legacy Code      ║
+║     16 Edge Functions | 2 Auth Systems | Zero Legacy Code      ║
 ║     MCP Server v6.0: 25 Tools | SQL-Native Diagnose + Tree    ║
 ║     Phase 3: Hybrid Search (pgvector + tsvector + pg_trgm)     ║
 ║     Phase 6: SQL-Native Matching + Domain Inference            ║
+║     Phase 6.1: Unified Backfill Engine (Strategy Pattern)      ║
 ║     Runtime: 100% Deno.serve() native                         ║
 ║     Secrets: Supabase Vault + Multi-Domain Keys               ║
-║     verify_jwt: false (ALL 18 functions)                      ║
+║     verify_jwt: false (ALL 16 functions)                      ║
 ║     SECRET DOMAINS: admin | general                           ║
 ╚═══════════════════════════════════════════════════════════════╝
 ```
+
+---
+
+## v6.1 Changelog (2026-03-02)
+
+### Phase 6.1: Unified Backfill Engine
+
+Replaced 3 inconsistent one-shot backfill functions with a single unified `vault-backfill` Edge Function powered by a reusable **Strategy Pattern** engine.
+
+### New Shared Modules (+2)
+- **`_shared/backfill-engine.ts`:** Core engine with batch processing, exponential backoff retries (429/500), progress tracking, dry_run support, and structural validation before persist.
+- **`_shared/backfill-strategies/`:** Directory containing 4 strategy modules:
+  - `diagnose-fields.ts` — Populates `common_errors` + `solves_problems` via GPT-4o-mini
+  - `context-fields.ts` — Generates `context_markdown` + `test_code` via GPT-4o-mini
+  - `changelog-seed.ts` — Seeds "v1" changelog entries (pure SQL, no AI)
+  - `embeddings.ts` — Generates vector embeddings via OpenAI `text-embedding-3-small`
+
+### New SQL Functions (+1)
+- **`fetch_modules_without_changelog(p_limit)`:** LEFT JOIN–based RPC that identifies modules with zero changelog records natively in Postgres. Eliminates JS-side filtering and the 1000-row PostgREST limit bug.
+
+### New Edge Functions (+1)
+- **`vault-backfill`:** Unified entry point for all vault enrichment backfills. Accepts `action` parameter to select strategy. Uses `withSentry` + `api-helpers` + `cors-v2` (standard pattern).
+
+### Deleted Edge Functions (-2)
+- **`vault-backfill-diagnose-fields`:** Replaced by `vault-backfill` action `diagnose-fields`.
+- **`vault-backfill-embeddings`:** Replaced by `vault-backfill` action `embeddings`. Had inconsistent CORS and no `withSentry`.
+
+### Refactored (+1)
+- **`vault-backfill-playbooks`:** Migrated from wildcard CORS to standard `withSentry` + `api-helpers` + `cors-v2` pattern. Logic unchanged.
+
+### Architectural Impact
+- **3 inconsistent functions → 1 unified engine** with zero code duplication
+- **SQL-native filtering** in all strategies (no JS-side filtering)
+- **Exponential backoff retries** for OpenAI rate limits (429/500)
+- **Structural validation** of AI-generated output before database persist
+- Adding a new backfill = 1 strategy module (~30-50 lines)
 
 ---
 
@@ -55,7 +92,7 @@ The core architectural shift of Phase 6 moves all data matching logic from JavaS
 ## v5.5 Changelog (2026-03-02)
 
 ### Phase 5A: Playbook Population
-- **vault-backfill-playbooks (new EF):** One-shot administrative function that converts `module_group` values into `vault_playbooks` and `vault_playbook_modules` records. Idempotent (skips existing slugs). Supports `dry_run` mode and configurable `min_modules` threshold.
+- **vault-backfill-playbooks (now part of vault-backfill-playbooks EF):** One-shot administrative function that converts `module_group` values into `vault_playbooks` and `vault_playbook_modules` records. Idempotent (skips existing slugs). Supports `dry_run` mode and configurable `min_modules` threshold.
 - **bootstrap.ts:** Added `behavioral_rule` mandating real `database_schema` DDL for backend/architecture/security modules. Added `anti_pattern` warning about 15-point validation penalty for missing schemas.
 
 ## v5.4 Changelog (2026-03-02)
@@ -79,10 +116,6 @@ The core architectural shift of Phase 6 moves all data matching logic from JavaS
 
 ### Fixes
 - **vault-ingest REST endpoint:** Added 12 missing fields to both ingest mapping and update `allowedFields`: `common_errors`, `solves_problems`, `test_code`, `difficulty`, `estimated_minutes`, `database_schema`, `prerequisites`, `ai_metadata`, `usage_hint`, `module_group`, `implementation_order`, `version`. Now fully aligned with MCP `ingest.ts`/`update.ts`.
-
-### New Functions
-- **vault-backfill-diagnose-fields:** One-shot administrative function that uses OpenAI (`gpt-4o-mini`) to populate `common_errors` and `solves_problems` on global modules where these fields are empty. Processes in batches of 10 with 2s delay. Supports `dry_run` mode and configurable `limit`.
-
 
 ## v5.3.1 Changelog (2026-03-02)
 
@@ -123,12 +156,12 @@ The core architectural shift of Phase 6 moves all data matching logic from JavaS
 
 | Metric | Value |
 | :--- | :--- |
-| **Total Functions** | 18 |
+| **Total Functions** | 16 |
 | **Internal Functions (Frontend)** | 12 |
 | **Public Functions (External API)** | 3 |
-| **Utility Functions (One-shot)** | 3 |
+| **Utility Functions (One-shot)** | 2 |
 | **Functions with verify_jwt=true** | 0 ✅ |
-| **config.toml entries** | 18 ✅ |
+| **config.toml entries** | 16 ✅ |
 | **API Key System (External)** | `dvlt_` keys via Supabase Vault ✅ |
 | **Security Domains (Secrets)** | 2 (admin, general) ✅ |
 | **Base URL (Internal & External)** | `https://bskfnthwewhpfrldbhqx.supabase.co/functions/v1/` |
@@ -139,7 +172,7 @@ The core architectural shift of Phase 6 moves all data matching logic from JavaS
 
 DevVault operates with two distinct and isolated authentication systems, ensuring that internal access (from the frontend application) and external access (from AI agents) have appropriate security mechanisms.
 
-**ABSOLUTE RULE**: All 17 functions use `verify_jwt = false` in `supabase/config.toml`. Authentication is always handled inside the function code, enabling this flexible architecture.
+**ABSOLUTE RULE**: All 16 functions use `verify_jwt = false` in `supabase/config.toml`. Authentication is always handled inside the function code, enabling this flexible architecture.
 
 ### 1. Internal Authentication (Frontend App)
 
@@ -162,7 +195,7 @@ To limit the "blast radius" in case of a key leak, the system uses two service k
 | Domain | Environment Variable | Purpose | Functions Using It |
 | :--- | :--- | :--- | :--- |
 | **admin** | `DEVVAULT_SECRET_ADMIN` | Critical high-risk operations: key creation/revocation, direct Vault access, user role changes. | `create-api-key`, `revoke-api-key`, `admin-crud` |
-| **general** | `DEVVAULT_SECRET_GENERAL` | Standard daily read/write operations such as project, bug, and vault module CRUDs. | All other 12 functions |
+| **general** | `DEVVAULT_SECRET_GENERAL` | Standard daily read/write operations such as project, bug, and vault module CRUDs. | All other 13 functions |
 
 ---
 
@@ -203,10 +236,9 @@ To limit the "blast radius" in case of a key leak, the system uses two service k
 | `list-devvault-keys` | Internal (JWT) | general | Lists metadata (prefix, name, usage date) of the user's `dvlt_` keys. No `action`. |
 | `admin-crud` | Internal (JWT) | admin | **Endpoint for the Admin Panel.** Requires `admin` or `owner` role. **Actions:** `get-my-role`, `list-users`, `change-role` (owner), `admin-stats`, `list-api-keys`, `admin-revoke-api-key` (owner), `list-global-modules`, `unpublish-module`. |
 
-### Utilities (One-shot)
+### Utilities (One-shot / Backfill)
 
 | Function | Auth | Domain | Description |
 | :--- | :--- | :--- | :--- |
-| `vault-backfill-embeddings` | Manual | general | **Embedding backfill for existing modules.** Processes modules with `embedding IS NULL` in batches of 20, generating embeddings via OpenAI `text-embedding-3-small`. One-shot function for manual execution after Phase 3 migration. |
-| `vault-backfill-diagnose-fields` | Manual | general | **Diagnose fields backfill for existing modules.** Uses OpenAI `gpt-4o-mini` to generate `common_errors` and `solves_problems` for global modules where these fields are empty. Processes in batches of 10 with 2s delay. Supports `dry_run` mode and configurable `limit` (default 500, max 1000). |
-| `vault-backfill-playbooks` | Manual | general | **Playbook backfill from module_groups.** Converts `module_group` values into `vault_playbooks` and `vault_playbook_modules` records. Idempotent (skips existing slugs). Params: `owner_user_id` (required), `min_modules` (default 3), `dry_run` (default false). |
+| `vault-backfill` | Manual | general | **Unified backfill engine for vault module enrichment.** Uses Strategy Pattern with shared `_shared/backfill-engine.ts`. Supports batch processing, exponential backoff retries, structural validation, dry_run mode, and progress tracking. **Actions:** `diagnose-fields` (GPT-4o-mini → `common_errors` + `solves_problems`), `context-fields` (GPT-4o-mini → `context_markdown` + `test_code`), `changelog-seed` (pure SQL → v1 changelog entries), `embeddings` (OpenAI → vector embeddings). POST `{ action, limit?, dry_run? }`. |
+| `vault-backfill-playbooks` | Manual | general | **Playbook backfill from module_groups.** Converts `module_group` values into `vault_playbooks` and `vault_playbook_modules` records. Idempotent (skips existing slugs). Params: `owner_user_id` (required), `min_modules` (default 3), `dry_run` (default false). Not part of the unified engine because it creates separate entities (playbooks), not field enrichments on `vault_modules`. |

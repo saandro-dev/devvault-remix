@@ -38,18 +38,12 @@ export const contextFieldsStrategy: BackfillStrategy<ContextRow, ContextResult> 
       .from("vault_modules")
       .select("id, title, code, description, domain, module_type, language, tags, why_it_matters, usage_hint, code_example, context_markdown, test_code")
       .eq("visibility", "global")
-      .or("context_markdown.is.null,test_code.is.null")
+      .or("context_markdown.is.null,context_markdown.eq.,test_code.is.null,test_code.eq.")
       .limit(limit);
 
     if (error) throw error;
 
-    // Filter further: include modules where fields are null or empty strings
     return ((data ?? []) as (ContextRow & { context_markdown: string | null; test_code: string | null })[])
-      .filter((m) => {
-        const needsContext = !m.context_markdown || m.context_markdown.trim() === "";
-        const needsTest = !m.test_code || m.test_code.trim() === "";
-        return needsContext || needsTest;
-      })
       .map(({ context_markdown: _cm, test_code: _tc, ...rest }) => rest as ContextRow);
   },
 
