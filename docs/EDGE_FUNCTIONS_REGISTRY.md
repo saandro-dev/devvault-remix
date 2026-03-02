@@ -16,7 +16,7 @@
 ║     Phase 3: Hybrid Search (pgvector + tsvector + pg_trgm)     ║
 ║     Runtime: 100% Deno.serve() native                         ║
 ║     Secrets: Supabase Vault + Multi-Domain Keys               ║
-║     verify_jwt: false (ALL 16 functions)                      ║
+║     verify_jwt: false (ALL 17 functions)                      ║
 ║     SECRET DOMAINS: admin | general                           ║
 ╚═══════════════════════════════════════════════════════════════╝
 ```
@@ -76,7 +76,7 @@
 | **Public Functions (External API)** | 3 |
 | **Utility Functions (One-shot)** | 2 |
 | **Functions with verify_jwt=true** | 0 ✅ |
-| **config.toml entries** | 16 ✅ |
+| **config.toml entries** | 17 ✅ |
 | **API Key System (External)** | `dvlt_` keys via Supabase Vault ✅ |
 | **Security Domains (Secrets)** | 2 (admin, general) ✅ |
 | **Base URL (Internal & External)** | `https://bskfnthwewhpfrldbhqx.supabase.co/functions/v1/` |
@@ -87,7 +87,7 @@
 
 DevVault operates with two distinct and isolated authentication systems, ensuring that internal access (from the frontend application) and external access (from AI agents) have appropriate security mechanisms.
 
-**ABSOLUTE RULE**: All 16 functions use `verify_jwt = false` in `supabase/config.toml`. Authentication is always handled inside the function code, enabling this flexible architecture.
+**ABSOLUTE RULE**: All 17 functions use `verify_jwt = false` in `supabase/config.toml`. Authentication is always handled inside the function code, enabling this flexible architecture.
 
 ### 1. Internal Authentication (Frontend App)
 
