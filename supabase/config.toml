@@ -50,3 +50,6 @@ verify_jwt = false
 
 [functions.vault-backfill-diagnose-fields]
 verify_jwt = false
+
+[functions.vault-backfill-playbooks]
+verify_jwt = false

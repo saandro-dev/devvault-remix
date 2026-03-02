@@ -125,6 +125,7 @@ const AGENT_GUIDE = {
     "When a module has context_markdown, ALWAYS read it — it contains critical architecture decisions.",
     "When ingesting new modules, include why_it_matters and code_example — modules without these are considered incomplete.",
     "Use devvault_load_context with 'tags' parameter to find modules across projects (e.g. tags: ['evolution-api'] finds all Evolution API modules regardless of source_project).",
+    "When ingesting or updating backend, architecture, or security modules that interact with a database, you MUST include the real database_schema DDL from the source project. Do NOT fabricate or guess schemas — extract the actual CREATE TABLE, CREATE POLICY, CREATE FUNCTION statements from the source project's migration files or database.",
   ],
 
   anti_patterns: [
@@ -135,6 +136,7 @@ const AGENT_GUIDE = {
     "Do NOT ignore _hint and _instructions fields in tool responses — they guide your next action.",
     "Do NOT use devvault_report_bug for user project bugs — use devvault_diary_bug instead.",
     "Do NOT forget to call devvault_task_end — abandoned tasks without closure pollute analytics.",
+    "Do NOT omit database_schema for DB-interacting modules when the source project schema is available — modules without it score 15 points lower in validation and agents lose critical context for correct implementation.",
   ],
 };
 
