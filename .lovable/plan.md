@@ -1,118 +1,104 @@
 
 
-# Plano: Corrigir vault-ingest REST + Backfill common_errors/solves_problems
+# Audit Report v5.3.2 — Post-Implementation Verification
 
-## Diagnostico
-
-Dois problemas identificados na causa raiz:
-
-### Problema 1: vault-ingest REST endpoint incompleto
-O endpoint `vault-ingest` (REST, usado antes do MCP) tem a lista `allowedFields` para update com apenas 18 campos, faltando 12 campos criticos: `common_errors`, `solves_problems`, `test_code`, `difficulty`, `estimated_minutes`, `database_schema`, `prerequisites`, `ai_metadata`, `usage_hint`, `module_group`, `implementation_order`, `version`. O mapeamento de ingest tambem ignora esses campos.
-
-O MCP (`ingest.ts` e `update.ts`) ja suporta todos esses campos corretamente. A inconsistencia entre os dois caminhos de escrita e uma violacao do principio de consistencia arquitetural.
-
-### Problema 2: 578 modulos com campos vazios
-0 de 578 modulos globais tem `common_errors` ou `solves_problems` preenchidos. Isso torna as estrategias 1 e 2 do `devvault_diagnose` completamente inuteis (retornam sempre 0 resultados).
+## Status: 3 Issues Found (2 bugs, 1 doc inconsistency)
 
 ---
 
-## Analise de Solucoes
+## What Was Successfully Implemented
 
-### Solucao A: Corrigir vault-ingest + Criar edge function de backfill inteligente
-- Manutenibilidade: 10/10
-- Zero DT: 10/10
-- Arquitetura: 10/10
-- Escalabilidade: 10/10
-- Seguranca: 10/10
-- **NOTA FINAL: 10/10**
-
-Alinhar vault-ingest com o MCP (mesmos campos permitidos). Criar uma edge function dedicada que usa OpenAI para gerar `common_errors` e `solves_problems` a partir do conteudo existente dos modulos (title, code, why_it_matters, usage_hint), processando em batches com rate limiting.
-
-### Solucao B: Apenas corrigir vault-ingest, backfill manual via MCP
-- Manutenibilidade: 7/10
-- Zero DT: 6/10 (578 modulos manualmente? impraticavel)
-- Arquitetura: 8/10
-- Escalabilidade: 3/10
-- Seguranca: 10/10
-- **NOTA FINAL: 6.5/10**
-
-### DECISAO: Solucao A (Nota 10)
-A Solucao B e inferior porque backfill manual de 578 modulos e impraticavel e deixa divida tecnica indefinidamente.
+1. **vault-ingest REST endpoint** — All 12 missing fields correctly added to both ingest mapping (lines 142-153) and update `allowedFields` (lines 200-203). Fully aligned with MCP `update.ts`. PASS.
+2. **vault-backfill-diagnose-fields** — Edge function created, deployed, and verified with a 5-module test. PASS (with caveats below).
+3. **v5.3.1 and v5.3.2 changelogs** — Documented in `EDGE_FUNCTIONS_REGISTRY.md`. PASS.
+4. **Previous bug fixes (BUG-4 through BUG-7)** — All confirmed working via agent tests. PASS.
 
 ---
 
-## Plano de Execucao
+## Issues Found
 
-### 1. Corrigir vault-ingest REST endpoint
+### Issue 1 (BUG): vault-backfill-diagnose-fields — Dead Client-Side Filter
 
-Arquivo: `supabase/functions/vault-ingest/index.ts`
+**File:** `supabase/functions/vault-backfill-diagnose-fields/index.ts` (lines 126-143)
 
-Alteracoes:
-- **Ingest mapping (linhas 119-143):** Adicionar mapeamento para `common_errors`, `solves_problems`, `test_code`, `difficulty`, `estimated_minutes`, `database_schema`, `prerequisites`, `ai_metadata`, `usage_hint`, `module_group`, `implementation_order`, `version`
-- **Update allowedFields (linhas 182-188):** Adicionar os 12 campos faltantes para alinhar com o MCP `update.ts`
+**Problem:** The SELECT on line 126 fetches `id, title, code, why_it_matters, usage_hint, tags, description` — but the client-side filter on lines 137-142 references `m.common_errors` and `m.solves_problems`, which are NOT in the SELECT. These will always be `undefined`, making the filter a no-op (all modules pass).
 
-### 2. Criar edge function vault-backfill-diagnose-fields
+The `ModuleRow` interface (lines 22-30) also omits these fields, confirming the type mismatch.
 
-Nova edge function: `supabase/functions/vault-backfill-diagnose-fields/index.ts`
+**Impact:** The PostgREST `.or("common_errors.is.null,common_errors.eq.[]")` filter on line 128 partially compensates, but:
+- Modules with non-null `common_errors` but empty `solves_problems` are NOT caught by the server filter
+- The client-side filter was intended as a safety net but is dead code
 
-Logica:
-1. Buscar modulos globais onde `common_errors = '[]'` e `solves_problems = '{}'`
-2. Para cada modulo, construir um prompt para OpenAI com `title`, `code` (primeiros 2000 chars), `why_it_matters`, `usage_hint`, `tags`
-3. Pedir ao OpenAI para gerar:
-   - `common_errors`: array de `{error, cause, fix}` baseado no codigo
-   - `solves_problems`: array de strings descrevendo problemas que o modulo resolve
-4. Processar em batches de 10, com delay de 2s entre batches
-5. Atualizar cada modulo via `supabase.from('vault_modules').update()`
-6. Retornar relatorio com total processado/falhado
+**Root Cause:** Architectural oversight — the SELECT and the filter were written independently without verifying column alignment.
 
-Autenticacao: Service role (chamada administrativa)
+**Fix:**
+- Add `common_errors, solves_problems` to the SELECT query
+- Add `common_errors` and `solves_problems` to the `ModuleRow` interface
+- Remove the server-side `.or()` filter (redundant with a correct client-side filter) OR fix the server-side filter to also cover `solves_problems`
 
-### 3. Atualizar documentacao
+### Issue 2 (BUG): vault-backfill-diagnose-fields — Missing Sentry Wrapper
 
-Arquivo: `docs/EDGE_FUNCTIONS_REGISTRY.md`
-- Adicionar entrada para a nova edge function `vault-backfill-diagnose-fields`
-- Adicionar changelog v5.3.2 documentando a correcao do vault-ingest
+**File:** `supabase/functions/vault-backfill-diagnose-fields/index.ts` (line 102)
+
+**Problem:** Uses bare `Deno.serve(async (req) => {...})` instead of `Deno.serve(withSentry("vault-backfill-diagnose-fields", async (req) => {...}))`. Every other non-utility edge function in the project uses `withSentry` for error tracking. This is an inconsistency that could mask runtime errors during a 500+ module backfill.
+
+**Fix:** Import `withSentry` from `../_shared/sentry.ts` and wrap the handler.
+
+### Issue 3 (DOC): EDGE_FUNCTIONS_REGISTRY.md — Count Mismatch
+
+**File:** `docs/EDGE_FUNCTIONS_REGISTRY.md` (lines 15, 19, 74, 79, 90)
+
+**Problem:** Multiple references still say "16 functions" or "16 config.toml entries" despite the addition of `vault-backfill-diagnose-fields` making it 17 total:
+- Badge line 15: `17 Edge Functions` — CORRECT
+- Badge line 19: `verify_jwt: false (ALL 16 functions)` — WRONG, should be 17
+- Summary line 79: `config.toml entries: 16` — WRONG, should be 17
+- Line 90: `All 16 functions use verify_jwt = false` — WRONG, should be 17
+
+**Fix:** Update all occurrences of "16" to "17" in the badge and summary section.
 
 ---
 
-## Arvore de Arquivos Afetados
+## Backfill Data Status
+
+- **Total global modules:** 578
+- **Modules with common_errors populated:** 5 (from test run)
+- **Modules still needing backfill:** 573
+- The backfill function works but has not been run at full scale yet
+
+---
+
+## Protocol Compliance Check (Section 3 / Section 4)
+
+| Criterion | Status |
+|---|---|
+| Zero Remendos (4.1) | Issue 1 is dead code, not a band-aid — but it needs root-cause fix |
+| Arquiteto Antes de Pedreiro (4.2) | The SELECT/filter mismatch shows code was written before verifying data flow |
+| MVP Arquitetural (4.3) | The overall architecture is sound |
+| Divida Tecnica Zero (4.4) | 3 issues above constitute minor technical debt |
+| Code Hygiene (5.4) | File is 211 lines, under 300 limit. PASS |
+| Clean Architecture (5.3) | Single Responsibility maintained. PASS |
+
+---
+
+## Execution Plan
+
+### 1. Fix vault-backfill-diagnose-fields (Issues 1 + 2)
+
+- Add `common_errors, solves_problems` to SELECT query
+- Add both fields to `ModuleRow` interface
+- Improve server-side filter: `.or("common_errors.is.null,common_errors.eq.[],solves_problems.is.null,solves_problems.eq.{}")`
+- Wrap handler with `withSentry`
+
+### 2. Fix documentation counts (Issue 3)
+
+- Update badge: "ALL 16 functions" to "ALL 17 functions"
+- Update summary: "config.toml entries" from 16 to 17
+- Update text: "All 16 functions" to "All 17 functions"
+
+### Files Affected
 
 ```text
-supabase/functions/vault-ingest/index.ts                    -- Fix: alinhar campos com MCP
-supabase/functions/vault-backfill-diagnose-fields/index.ts  -- Nova: backfill via OpenAI
-docs/EDGE_FUNCTIONS_REGISTRY.md                             -- Changelog v5.3.2
+supabase/functions/vault-backfill-diagnose-fields/index.ts  -- Fix: SELECT + types + Sentry
+docs/EDGE_FUNCTIONS_REGISTRY.md                             -- Fix: 16 -> 17 counts
 ```
-
-## Detalhes Tecnicos
-
-### vault-ingest allowedFields (update)
-
-Campos a adicionar:
-```typescript
-const allowedFields = [
-  // ... existentes ...
-  "common_errors", "solves_problems", "test_code",
-  "difficulty", "estimated_minutes", "database_schema",
-  "prerequisites", "ai_metadata", "usage_hint",
-  "module_group", "implementation_order", "version",
-];
-```
-
-### vault-backfill-diagnose-fields - Prompt OpenAI
-
-```text
-You are a technical analyst. Given a code module, generate:
-1. common_errors: 2-4 common errors developers encounter when using this code
-2. solves_problems: 3-5 problem descriptions this module solves
-
-Format: JSON with keys "common_errors" (array of {error, cause, fix}) 
-and "solves_problems" (array of strings).
-
-Module: {title}
-Tags: {tags}
-Why it matters: {why_it_matters}
-Code (first 2000 chars): {code}
-```
-
-Batch processing: 10 modulos por batch, 2s delay, timeout 300s total.
 
