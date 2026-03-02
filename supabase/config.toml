@@ -45,7 +45,10 @@ verify_jwt = false
 [functions.devvault-mcp]
 verify_jwt = false
 
-[functions.vault-backfill-embeddings]
+[functions.vault-backfill]
+verify_jwt = false
+
+[functions.vault-backfill-playbooks]
 verify_jwt = false
 
 [functions.vault-backfill-diagnose-fields]

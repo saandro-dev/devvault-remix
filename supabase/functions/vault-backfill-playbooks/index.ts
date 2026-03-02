@@ -1,29 +1,21 @@
 /**
- * vault-backfill-playbooks — One-shot administrative Edge Function.
+ * vault-backfill-playbooks — Administrative Edge Function.
  *
  * Converts existing `module_group` values in `vault_modules` into
  * `vault_playbooks` and `vault_playbook_modules` records.
  *
- * Logic:
- * 1. Query all distinct `module_group` values with >= `min_modules` global modules.
- * 2. For each group, create a `vault_playbooks` record (idempotent — skip if slug exists).
- * 3. For each module in the group, create a `vault_playbook_modules` junction record.
+ * This is NOT a field enrichment backfill — it creates new entities.
+ * Therefore it does NOT use the backfill engine (different output pattern).
  *
- * Body params:
- *   - owner_user_id (required): UUID of the user who will own the playbooks.
- *   - min_modules (optional, default 3): Minimum modules per group to qualify.
- *   - dry_run (optional, default false): If true, returns plan without inserting.
- *
- * Auth: Manual execution only (no JWT, no API key). Protected by manual invocation.
+ * Standardized to use: withSentry + api-helpers + cors-v2.
  */
 
+import { handleCorsV2, createSuccessResponse, createErrorResponse, ERROR_CODES } from "../_shared/api-helpers.ts";
+import { withSentry } from "../_shared/sentry.ts";
 import { getSupabaseClient } from "../_shared/supabase-client.ts";
+import { createLogger } from "../_shared/logger.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
-};
+const logger = createLogger("vault-backfill-playbooks");
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -62,6 +54,7 @@ function buildDescription(titles: string[]): string {
 interface GroupModule {
   id: string;
   title: string;
+  module_group: string;
   domain: string | null;
   difficulty: string | null;
   tags: string[];
@@ -82,182 +75,164 @@ interface PlaybookPlan {
 
 // ─── Main Handler ───────────────────────────────────────────────────────────
 
-Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+Deno.serve(withSentry("vault-backfill-playbooks", async (req: Request) => {
+  const corsResponse = handleCorsV2(req);
+  if (corsResponse) return corsResponse;
+
+  if (req.method !== "POST") {
+    return createErrorResponse(req, ERROR_CODES.VALIDATION_ERROR, "Only POST is accepted.", 405);
   }
 
-  try {
-    const body = await req.json();
-    const ownerUserId: string | undefined = body.owner_user_id;
-    const minModules: number = body.min_modules ?? 3;
-    const dryRun: boolean = body.dry_run ?? false;
+  const body = await req.json();
+  const ownerUserId: string | undefined = body.owner_user_id;
+  const minModules: number = body.min_modules ?? 3;
+  const dryRun: boolean = body.dry_run ?? false;
 
-    if (!ownerUserId) {
-      return new Response(
-        JSON.stringify({ error: "owner_user_id is required" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
+  if (!ownerUserId) {
+    return createErrorResponse(req, ERROR_CODES.VALIDATION_ERROR, "owner_user_id is required.", 400);
+  }
+
+  const client = getSupabaseClient("general");
+
+  // 1. Fetch all global modules with a module_group
+  const { data: modules, error: fetchErr } = await client
+    .from("vault_modules")
+    .select("id, title, module_group, domain, difficulty, tags, implementation_order, created_at")
+    .eq("visibility", "global")
+    .not("module_group", "is", null)
+    .order("module_group")
+    .order("implementation_order", { ascending: true, nullsFirst: false })
+    .order("created_at", { ascending: true });
+
+  if (fetchErr) throw fetchErr;
+
+  // 2. Group by module_group
+  const groups = new Map<string, GroupModule[]>();
+  for (const m of (modules ?? []) as GroupModule[]) {
+    const key = m.module_group;
+    if (!key || key.trim() === "") continue;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)!.push(m);
+  }
+
+  // 3. Filter groups with >= min_modules
+  const qualifiedGroups = [...groups.entries()].filter(
+    ([, mods]) => mods.length >= minModules,
+  );
+
+  // 4. Fetch existing playbook slugs for idempotency
+  const { data: existingPlaybooks } = await client
+    .from("vault_playbooks")
+    .select("slug");
+  const existingSlugs = new Set(
+    (existingPlaybooks ?? []).map((p: { slug: string }) => p.slug),
+  );
+
+  // 5. Build plan
+  const plans: PlaybookPlan[] = [];
+  const skipped: string[] = [];
+
+  for (const [groupSlug, mods] of qualifiedGroups) {
+    if (existingSlugs.has(groupSlug)) {
+      skipped.push(groupSlug);
+      continue;
     }
 
-    const client = getSupabaseClient("general");
+    const titles = mods.map((m) => m.title);
+    const domains = mods.map((m) => m.domain).filter(Boolean) as string[];
+    const difficulties = mods.map((m) => m.difficulty).filter(Boolean) as string[];
+    const allTags = mods.flatMap((m) => m.tags);
+    const uniqueTags = [...new Set(allTags)].slice(0, 10);
 
-    // 1. Fetch all global modules with a module_group
-    const { data: modules, error: fetchErr } = await client
-      .from("vault_modules")
-      .select("id, title, module_group, domain, difficulty, tags, implementation_order, created_at")
-      .eq("visibility", "global")
-      .not("module_group", "is", null)
-      .order("module_group")
-      .order("implementation_order", { ascending: true, nullsFirst: false })
-      .order("created_at", { ascending: true });
+    const modulesWithPosition = mods.map((m, idx) => ({
+      id: m.id,
+      position: m.implementation_order ?? idx + 1,
+    }));
 
-    if (fetchErr) {
-      return new Response(
-        JSON.stringify({ error: fetchErr.message }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
-    }
+    plans.push({
+      slug: groupSlug,
+      title: humanizeSlug(groupSlug),
+      description: buildDescription(titles),
+      domain: domains.length > 0 ? mode(domains) : null,
+      difficulty: difficulties.length > 0 ? mode(difficulties) : null,
+      tags: uniqueTags,
+      module_count: mods.length,
+      modules: modulesWithPosition,
+    });
+  }
 
-    // 2. Group by module_group
-    const groups = new Map<string, GroupModule[]>();
-    for (const m of modules as GroupModule[]) {
-      const key = (m as unknown as { module_group: string }).module_group;
-      if (!key || key.trim() === "") continue;
-      if (!groups.has(key)) groups.set(key, []);
-      groups.get(key)!.push(m);
-    }
+  if (dryRun) {
+    return createSuccessResponse(req, {
+      dry_run: true,
+      total_groups_found: groups.size,
+      qualified_groups: qualifiedGroups.length,
+      will_create: plans.length,
+      skipped_existing: skipped.length,
+      skipped_slugs: skipped,
+      plans: plans.map((p) => ({
+        slug: p.slug,
+        title: p.title,
+        domain: p.domain,
+        difficulty: p.difficulty,
+        module_count: p.module_count,
+        tags: p.tags,
+        description: p.description.substring(0, 120) + "...",
+      })),
+    });
+  }
 
-    // 3. Filter groups with >= min_modules
-    const qualifiedGroups = [...groups.entries()].filter(
-      ([, mods]) => mods.length >= minModules,
-    );
+  // 6. Execute inserts
+  let playbooksCreated = 0;
+  let junctionsCreated = 0;
+  const errors: Array<{ slug: string; error: string }> = [];
 
-    // 4. Fetch existing playbook slugs to ensure idempotency
-    const { data: existingPlaybooks } = await client
+  for (const plan of plans) {
+    const { data: pbData, error: pbErr } = await client
       .from("vault_playbooks")
-      .select("slug");
-    const existingSlugs = new Set(
-      (existingPlaybooks ?? []).map((p: { slug: string }) => p.slug),
-    );
+      .insert({
+        slug: plan.slug,
+        title: plan.title,
+        description: plan.description,
+        domain: plan.domain,
+        difficulty: plan.difficulty,
+        tags: plan.tags,
+        status: "published",
+        user_id: ownerUserId,
+      })
+      .select("id")
+      .single();
 
-    // 5. Build plan
-    const plans: PlaybookPlan[] = [];
-    const skipped: string[] = [];
-
-    for (const [groupSlug, mods] of qualifiedGroups) {
-      if (existingSlugs.has(groupSlug)) {
-        skipped.push(groupSlug);
-        continue;
-      }
-
-      const titles = mods.map((m) => m.title);
-      const domains = mods.map((m) => m.domain).filter(Boolean) as string[];
-      const difficulties = mods.map((m) => m.difficulty).filter(Boolean) as string[];
-      const allTags = mods.flatMap((m) => m.tags);
-      const uniqueTags = [...new Set(allTags)].slice(0, 10);
-
-      const modulesWithPosition = mods.map((m, idx) => ({
-        id: m.id,
-        position: m.implementation_order ?? idx + 1,
-      }));
-
-      plans.push({
-        slug: groupSlug,
-        title: humanizeSlug(groupSlug),
-        description: buildDescription(titles),
-        domain: domains.length > 0 ? mode(domains) : null,
-        difficulty: difficulties.length > 0 ? mode(difficulties) : null,
-        tags: uniqueTags,
-        module_count: mods.length,
-        modules: modulesWithPosition,
-      });
+    if (pbErr) {
+      errors.push({ slug: plan.slug, error: pbErr.message });
+      continue;
     }
 
-    if (dryRun) {
-      return new Response(
-        JSON.stringify({
-          dry_run: true,
-          total_groups_found: groups.size,
-          qualified_groups: qualifiedGroups.length,
-          will_create: plans.length,
-          skipped_existing: skipped.length,
-          skipped_slugs: skipped,
-          plans: plans.map((p) => ({
-            slug: p.slug,
-            title: p.title,
-            domain: p.domain,
-            difficulty: p.difficulty,
-            module_count: p.module_count,
-            tags: p.tags,
-            description: p.description.substring(0, 120) + "...",
-          })),
-        }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
+    playbooksCreated++;
+
+    const junctions = plan.modules.map((m) => ({
+      playbook_id: pbData.id,
+      module_id: m.id,
+      position: m.position,
+    }));
+
+    const { error: jErr } = await client
+      .from("vault_playbook_modules")
+      .insert(junctions);
+
+    if (jErr) {
+      errors.push({ slug: plan.slug, error: `Junction: ${jErr.message}` });
+    } else {
+      junctionsCreated += junctions.length;
     }
-
-    // 6. Execute inserts
-    let playbooksCreated = 0;
-    let junctionsCreated = 0;
-    const errors: Array<{ slug: string; error: string }> = [];
-
-    for (const plan of plans) {
-      // Insert playbook
-      const { data: pbData, error: pbErr } = await client
-        .from("vault_playbooks")
-        .insert({
-          slug: plan.slug,
-          title: plan.title,
-          description: plan.description,
-          domain: plan.domain,
-          difficulty: plan.difficulty,
-          tags: plan.tags,
-          status: "published",
-          user_id: ownerUserId,
-        })
-        .select("id")
-        .single();
-
-      if (pbErr) {
-        errors.push({ slug: plan.slug, error: pbErr.message });
-        continue;
-      }
-
-      playbooksCreated++;
-
-      // Insert junction records
-      const junctions = plan.modules.map((m) => ({
-        playbook_id: pbData.id,
-        module_id: m.id,
-        position: m.position,
-      }));
-
-      const { error: jErr } = await client
-        .from("vault_playbook_modules")
-        .insert(junctions);
-
-      if (jErr) {
-        errors.push({ slug: plan.slug, error: `Junction: ${jErr.message}` });
-      } else {
-        junctionsCreated += junctions.length;
-      }
-    }
-
-    return new Response(
-      JSON.stringify({
-        success: true,
-        playbooks_created: playbooksCreated,
-        junctions_created: junctionsCreated,
-        skipped_existing: skipped.length,
-        errors: errors.length > 0 ? errors : undefined,
-      }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
-  } catch (err) {
-    return new Response(
-      JSON.stringify({ error: String(err) }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
   }
-});
+
+  logger.info("playbook backfill complete", { playbooksCreated, junctionsCreated, skipped: skipped.length });
+
+  return createSuccessResponse(req, {
+    success: true,
+    playbooks_created: playbooksCreated,
+    junctions_created: junctionsCreated,
+    skipped_existing: skipped.length,
+    errors: errors.length > 0 ? errors : undefined,
+  });
+}));
