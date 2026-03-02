@@ -1,63 +1,72 @@
-# Plano: Backfill de Enriquecimento do Vault — Solução C (9.8/10)
 
-## Status: ✅ IMPLEMENTADO E AUDITADO (2026-03-02)
 
-### O que foi feito
+# Plano: Preencher Dependencies dos 424 Modulos (92% → 100%)
 
-1. ✅ Criado `_shared/backfill-engine.ts` — Core engine reutilizável com Strategy Pattern, batch processing, exponential backoff retries, structural validation, dry_run, progress tracking.
-2. ✅ Criado `_shared/backfill-strategies/` com 4 strategies:
-   - `diagnose-fields.ts` — GPT-4o-mini → `common_errors` + `solves_problems`
-   - `context-fields.ts` — GPT-4o-mini → `context_markdown` + `test_code`
-   - `changelog-seed.ts` — Pure SQL → v1 changelog entries
-   - `embeddings.ts` — OpenAI → vector embeddings
-3. ✅ Criado `vault-backfill/index.ts` — Entry point unificado com 4 actions
-4. ✅ Refatorado `vault-backfill-playbooks` — Migrado para `withSentry` + `api-helpers` + `cors-v2`
-5. ✅ Deletado `vault-backfill-diagnose-fields/` — Substituído pela action `diagnose-fields`
-6. ✅ Deletado `vault-backfill-embeddings/` — Substituído pela action `embeddings`
-7. ✅ Atualizado `config.toml` — 16 entries limpas, zero entradas mortas
-8. ✅ Atualizado `EDGE_FUNCTIONS_REGISTRY.md` — Contadores corrigidos para 16 funções, vault-backfill documentado com 4 actions, changelog v6.1 adicionado
+## Diagnostico
 
-### Auditoria de Correções (Protocolo Seção 4)
+- **424 modulos** com `implementation_order > 1` dentro de `module_group` nao possuem nenhum registro em `vault_module_dependencies`.
+- **167 grupos** distintos, alguns com `implementation_order` duplicados (ex: 2 modulos com order=3 no mesmo grupo).
+- A funcao `vault_module_completeness` exige apenas `EXISTS(SELECT 1 FROM vault_module_dependencies WHERE module_id = ?)` — basta **1 dependencia** por modulo.
+- Constraint `uq_module_dependency (module_id, depends_on_id)` + `chk_no_self_reference` ja existem, protegendo contra duplicatas e auto-referencia.
 
-| Problema | Severidade | Status | Correção |
-|:---|:---|:---|:---|
-| P1: config.toml entrada morta + duplicata | P0 | ✅ Corrigido | Removidas linhas 54-58 |
-| P2: EDGE_FUNCTIONS_REGISTRY.md desatualizado | P0 | ✅ Corrigido | Reescrito com contadores corretos e vault-backfill documentado |
-| P3: Filtro JS no changelog-seed.ts | P1 | ✅ Corrigido | Criada RPC `fetch_modules_without_changelog` com LEFT JOIN nativo |
-| P4: Filtro JS no context-fields.ts | P1 | ✅ Corrigido | Query PostgREST com `.or("...eq.")` para empty strings |
-| P5: `as any` no vault-backfill/index.ts | P2 | ✅ Corrigido | `StrategyEntry` interface + `Record<string, StrategyEntry>` |
-| P6: plan.md desatualizado | P2 | ✅ Corrigido | Este documento |
-| P7: 1000-row limit no changelog-seed.ts | P3 | ✅ Corrigido | Eliminado pela RPC do P3 |
+## Estrategia: SQL Puro via Nova Backfill Strategy
 
-### Próximos Passos (Execução de Backfills)
+A logica e deterministica (sem IA): cada modulo com `implementation_order = N` depende de **um** modulo com `implementation_order = N-1` do mesmo `module_group`. Quando existem multiplos modulos no order anterior (duplicatas), selecionamos apenas um via `DISTINCT ON`.
+
+### Logica SQL Core
 
 ```text
-1. Executar: POST vault-backfill { action: "changelog-seed", limit: 1000 }
-2. Executar: POST vault-backfill { action: "diagnose-fields", limit: 200 }
-3. Executar: POST vault-backfill { action: "context-fields", limit: 100, dry_run: true }
-4. Executar: POST vault-backfill { action: "context-fields", limit: 100 }
+Para cada modulo M onde:
+  - visibility = 'global'
+  - module_group IS NOT NULL
+  - implementation_order > 1
+  - Nao possui nenhuma dependencia registrada
+
+Inserir 1 dependencia:
+  M → modulo P (mesmo module_group, implementation_order = M.order - 1)
+  
+Se existem multiplos P, escolher o mais recente (updated_at DESC).
+Usar ON CONFLICT DO NOTHING para seguranca.
 ```
 
-### Arquitetura Final
+## Implementacao (2 arquivos)
+
+### 1. Nova Strategy: `supabase/functions/_shared/backfill-strategies/auto-dependencies.ts`
+
+Cria um `BackfillStrategy` seguindo o padrao existente (Strategy Pattern do backfill engine):
+
+- **`fetchCandidates`**: Busca os 424 modulos que tem `module_group` + `implementation_order > 1` + zero deps.
+- **`process`**: Para cada modulo, encontra o predecessor (mesmo grupo, order - 1) via query SQL. Retorna `{ depends_on_id }`.
+- **`validate`**: Verifica que `depends_on_id` foi encontrado.
+- **`persist`**: Insere o registro em `vault_module_dependencies` com `ON CONFLICT DO NOTHING`.
+- **Config**: Usa `DEFAULT_DATA_CONFIG` (sem delay, batch 50, sem IA).
+
+### 2. Registrar no `supabase/functions/vault-backfill/index.ts`
+
+Adicionar `"auto-dependencies"` ao `STRATEGY_MAP`:
 
 ```text
-supabase/functions/
-  _shared/
-    backfill-engine.ts              (core engine — Strategy Pattern)
-    backfill-strategies/
-      diagnose-fields.ts            (AI: common_errors + solves_problems)
-      context-fields.ts             (AI: context_markdown + test_code)
-      changelog-seed.ts             (SQL: v1 changelog entries via RPC)
-      embeddings.ts                 (AI: vector embeddings)
-  vault-backfill/index.ts           (unified entry point — 4 actions)
-  vault-backfill-playbooks/index.ts (separate — creates playbook entities)
+STRATEGY_MAP["auto-dependencies"] = {
+  strategy: autoDependenciesStrategy,
+  config: DEFAULT_DATA_CONFIG
+}
 ```
 
-| Métrica | Antes | Depois |
-|:---|:---|:---|
-| Edge Functions de backfill | 3 (inconsistentes) | 1 unificada + 1 playbooks |
-| Código duplicado | ~300 linhas | 0 |
-| Filtro JS em vez de SQL | 2 instâncias | 0 (SQL-native) |
-| Retry em rate limit | Nenhum | Exponential backoff |
-| Validação estrutural | Nenhuma | Cada campo validado |
-| Type safety escapes | 1 (`as any`) | 0 |
+## Execucao
+
+Apos o deploy, basta uma unica chamada:
+
+```text
+POST /vault-backfill
+{ "action": "auto-dependencies", "limit": 500 }
+```
+
+Resultado esperado: ~424 insercoes, zero falhas, todos os modulos passam para score 100%.
+
+## Secao Tecnica
+
+- **Sem IA, sem custo**: Operacao puramente SQL, instantanea.
+- **Idempotente**: `ON CONFLICT DO NOTHING` + check de `NOT EXISTS` no fetch garante re-execucao segura.
+- **Segue o padrao existente**: Reutiliza o backfill engine, strategy pattern, logger, config — zero codigo ad-hoc.
+- **Tempo estimado**: ~2 segundos de execucao total para os 424 modulos.
+
