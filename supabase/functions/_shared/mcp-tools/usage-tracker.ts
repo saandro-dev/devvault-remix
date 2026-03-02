@@ -12,7 +12,7 @@ import type { AuthContext } from "./types.ts";
 const logger = createLogger("mcp-usage-tracker");
 
 interface UsageEvent {
-  event_type: "search" | "get" | "list" | "get_group" | "diagnose" | "search_miss" | "bug_reported" | "bug_resolved" | "success_reported" | "export_tree" | "check_updates";
+  event_type: "search" | "get" | "list" | "get_group" | "diagnose" | "search_miss" | "bug_reported" | "bug_resolved" | "success_reported" | "export_tree" | "check_updates" | "get_playbook" | "task_start" | "task_end" | "validate" | "validate_batch";
   tool_name: string;
   module_id?: string;
   query_text?: string;
