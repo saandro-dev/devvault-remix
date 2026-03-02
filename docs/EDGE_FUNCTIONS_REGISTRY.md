@@ -12,14 +12,43 @@
 ╔═══════════════════════════════════════════════════════════════╗
 ║  ✅ DEVVAULT PROTOCOL V2 - 10.0/10 - DUAL-AUTH ARCHITECTURE   ║
 ║     18 Edge Functions | 2 Auth Systems | Zero Legacy Code      ║
-║     MCP Server v5.4: 25 Tools | Knowledge Flywheel + Tree     ║
+║     MCP Server v6.0: 25 Tools | SQL-Native Diagnose + Tree    ║
 ║     Phase 3: Hybrid Search (pgvector + tsvector + pg_trgm)     ║
+║     Phase 6: SQL-Native Matching + Domain Inference            ║
 ║     Runtime: 100% Deno.serve() native                         ║
 ║     Secrets: Supabase Vault + Multi-Domain Keys               ║
-║     verify_jwt: false (ALL 17 functions)                      ║
+║     verify_jwt: false (ALL 18 functions)                      ║
 ║     SECRET DOMAINS: admin | general                           ║
 ╚═══════════════════════════════════════════════════════════════╝
 ```
+
+---
+
+## v6.0 Changelog (2026-03-02)
+
+### Phase 6: SQL-Native Diagnose Architecture
+
+The core architectural shift of Phase 6 moves all data matching logic from JavaScript memory into Postgres SQL functions, eliminating arbitrary `.limit()` ceilings and ensuring the database — not the Edge Function — performs string matching on its own data.
+
+### New SQL Functions (+3)
+- **`match_common_errors(p_error_text, p_domain, p_limit)`:** Replaces JS-based `matchCommonErrors`. Uses `jsonb_array_elements` + `ILIKE` to scan ALL modules' `common_errors` JSONB natively in Postgres. Zero arbitrary fetch limits.
+- **`match_solves_problems(p_error_text, p_tokens[], p_domain, p_limit)`:** Replaces JS-based `matchSolvesProblems`. Uses `unnest(solves_problems)` + `ILIKE` for exact matches, then tokenized partial matching (2+ token overlap) as fallback.
+- **`infer_domain_from_text(p_text)`:** Replaces hardcoded JS domain inference map. Counts keyword matches per domain from the `domain_inference_keywords` table. Returns NULL if no matches (no filter applied). Adding new keywords = one INSERT, zero deployments.
+
+### New Table (+1)
+- **`domain_inference_keywords`:** Stores keyword→domain mappings with priority weighting. Seeded with ~55 keywords across 5 domains (security, backend, frontend, architecture, devops). RLS: service role only.
+
+### Updated SQL Functions (+1)
+- **`vault_module_completeness`:** Now correct-by-design with explicit `v_total` calculation. `database_schema` only penalizes `backend`/`architecture`/`security` domains. Frontend/devops/saas_playbook modules are no longer unfairly penalized. Fixed latent bug where `v_total` was never incremented for bonus fields (could produce scores > 100%).
+
+### Refactored Files (+1)
+- **`diagnose-troubleshoot.ts`:** Transformed from a matching engine (~200 lines of JS string matching) into a lightweight orchestrator (~90 lines) that calls SQL RPCs. Deleted `matchCommonErrors` and `matchSolvesProblems` JS functions entirely.
+
+### Impact
+- Frontend module scores increased from uniform ~61 to ~92 (database_schema no longer penalized)
+- Backend modules correctly require database_schema
+- `devvault_diagnose` now infers domain from error text (e.g., "RLS recursion" → security) and prioritizes results accordingly
+- Zero magic numbers, zero arbitrary limits, zero hardcoded domain maps
 
 ---
 
@@ -146,7 +175,7 @@ To limit the "blast radius" in case of a key leak, the system uses two service k
 | `vault-crud` | Internal (JWT) | general | **Main BFF for the Vault.** Performs all CRUD operations on the user's knowledge modules. **Actions:** `list`, `get`, `create`, `update`, `delete`, `search`, `get_playbook`, `share`, `unshare`, `list_shares`, `add_dependency`, `remove_dependency`, `list_dependencies`. |
 | `vault-query` | External (API Key) | general | **Public READ endpoint for Agents.** Allows external systems to query the knowledge graph. **Actions:** `bootstrap`, `search`, `get`, `list`, `list_domains`. |
 | `vault-ingest` | External (API Key) | general | **Public WRITE endpoint for Agents.** Allows external systems to create, update, and delete modules. **Actions:** `ingest` (single/batch creation), `update`, `delete`. |
-| `devvault-mcp` | External (API Key) | general | **MCP Server (Model Context Protocol) for AI Agents (v5.4).** Exposes a structured API with tools to interact with the Vault. **Tools (25):** `devvault_bootstrap`, `devvault_search`, `devvault_get`, `devvault_list`, `devvault_domains`, `devvault_ingest`, `devvault_update`, `devvault_get_group`, `devvault_validate`, `devvault_delete`, `devvault_diagnose`, `devvault_report_bug`, `devvault_resolve_bug`, `devvault_report_success`, `devvault_export_tree`, `devvault_check_updates`, `devvault_load_context`, `devvault_quickstart`, `devvault_changelog`, `devvault_diary_bug`, `devvault_diary_resolve`, `devvault_diary_list`, `devvault_get_playbook`, `devvault_task_start`, `devvault_task_end`. **v5.4 New Tools:** `devvault_get_playbook` (curated playbook sequences with aggregated migrations and dependencies), `devvault_task_start` / `devvault_task_end` (agent task lifecycle tracking with duration, modules_used, and outcome analytics). **v5.4 Enhancements:** `devvault_validate` includes intelligent `database_schema` requirement detection. `devvault_bootstrap` includes `playbooks_index` and task tracking workflow. |
+| `devvault-mcp` | External (API Key) | general | **MCP Server (Model Context Protocol) for AI Agents (v6.0).** Exposes a structured API with tools to interact with the Vault. **Tools (25):** `devvault_bootstrap`, `devvault_search`, `devvault_get`, `devvault_list`, `devvault_domains`, `devvault_ingest`, `devvault_update`, `devvault_get_group`, `devvault_validate`, `devvault_delete`, `devvault_diagnose`, `devvault_report_bug`, `devvault_resolve_bug`, `devvault_report_success`, `devvault_export_tree`, `devvault_check_updates`, `devvault_load_context`, `devvault_quickstart`, `devvault_changelog`, `devvault_diary_bug`, `devvault_diary_resolve`, `devvault_diary_list`, `devvault_get_playbook`, `devvault_task_start`, `devvault_task_end`. **v6.0:** SQL-native diagnose architecture — `match_common_errors`, `match_solves_problems`, `infer_domain_from_text` RPCs replace JS matching. Domain-aware `vault_module_completeness` with explicit v_total. |
 
 ### Entity Management
 
