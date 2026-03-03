@@ -16,6 +16,9 @@
 import { handleCorsV2, createSuccessResponse, createErrorResponse, ERROR_CODES } from "../_shared/api-helpers.ts";
 import { withSentry } from "../_shared/sentry.ts";
 import { getSupabaseClient } from "../_shared/supabase-client.ts";
+import { authenticateRequest, isResponse } from "../_shared/auth.ts";
+import { requireRole } from "../_shared/role-validator.ts";
+import { createLogger } from "../_shared/logger.ts";
 import { runBackfill, DEFAULT_AI_CONFIG, DEFAULT_DATA_CONFIG } from "../_shared/backfill-engine.ts";
 import type { BackfillStrategy, BackfillConfig } from "../_shared/backfill-engine.ts";
 import { diagnoseFieldsStrategy } from "../_shared/backfill-strategies/diagnose-fields.ts";
@@ -38,6 +41,8 @@ const STRATEGY_MAP: Record<string, StrategyEntry> = {
   "auto-dependencies": { strategy: autoDependenciesStrategy, config: DEFAULT_DATA_CONFIG },
 };
 
+const log = createLogger("vault-backfill");
+
 Deno.serve(withSentry("vault-backfill", async (req: Request) => {
   const corsResponse = handleCorsV2(req);
   if (corsResponse) return corsResponse;
@@ -45,6 +50,14 @@ Deno.serve(withSentry("vault-backfill", async (req: Request) => {
   if (req.method !== "POST") {
     return createErrorResponse(req, ERROR_CODES.VALIDATION_ERROR, "Only POST is accepted.", 405);
   }
+
+  // Authentication + admin role check
+  const auth = await authenticateRequest(req);
+  if (isResponse(auth)) return auth;
+  const { user, client: authClient } = auth;
+  await requireRole(authClient, user.id, "admin");
+
+  log.info("backfill request", { userId: user.id });
 
   let action: string | undefined;
   let limit = 500;

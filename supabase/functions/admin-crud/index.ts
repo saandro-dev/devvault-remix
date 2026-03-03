@@ -25,6 +25,9 @@ import {
 import { authenticateRequest, isResponse } from "../_shared/auth.ts";
 import { withSentry } from "../_shared/sentry.ts";
 import { checkRateLimit } from "../_shared/rate-limit-guard.ts";
+import { createLogger } from "../_shared/logger.ts";
+
+const log = createLogger("admin-crud");
 
 import { handleGetMyRole } from "./handlers/get-my-role.ts";
 import { handleListUsers } from "./handlers/list-users.ts";
@@ -60,6 +63,7 @@ serve(withSentry("admin-crud", async (req: Request) => {
   try {
     const body = await req.json();
     const { action } = body;
+    log.info(`action=${action}`, { userId: user.id });
 
     switch (action) {
       case "get-my-role":

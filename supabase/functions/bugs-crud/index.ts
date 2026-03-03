@@ -4,7 +4,9 @@ import { authenticateRequest, isResponse } from "../_shared/auth.ts";
 import { withSentry } from "../_shared/sentry.ts";
 import { checkRateLimit } from "../_shared/rate-limit-guard.ts";
 import { sanitizeFields, sanitizeStringArray } from "../_shared/input-sanitizer.ts";
+import { createLogger } from "../_shared/logger.ts";
 
+const log = createLogger("bugs-crud");
 const TEXT_FIELDS = ["title", "symptom", "cause_code", "solution"];
 
 serve(withSentry("bugs-crud", async (req: Request) => {
@@ -28,6 +30,7 @@ serve(withSentry("bugs-crud", async (req: Request) => {
     const rawBody = await req.json();
     const body = sanitizeFields(rawBody, TEXT_FIELDS);
     const { action } = body;
+    log.info(`action=${action}`, { userId: user.id });
 
     switch (action) {
       case "list": {

@@ -3,7 +3,9 @@ import { handleCorsV2, createErrorResponse, createSuccessResponse, ERROR_CODES, 
 import { withSentry } from "../_shared/sentry.ts";
 import { checkRateLimit } from "../_shared/rate-limit-guard.ts";
 import { sanitizeFields } from "../_shared/input-sanitizer.ts";
+import { createLogger } from "../_shared/logger.ts";
 
+const log = createLogger("profiles-crud");
 const TEXT_FIELDS = ["display_name", "bio"];
 
 Deno.serve(withSentry("profiles-crud", async (req: Request) => {
@@ -23,6 +25,7 @@ Deno.serve(withSentry("profiles-crud", async (req: Request) => {
   try {
     const rawBody = await req.json();
     const { action, payload: rawPayload } = rawBody;
+    log.info(`action=${action}`, { userId: user.id });
 
     switch (action) {
       case "get": {

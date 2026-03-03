@@ -2,6 +2,9 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { handleCorsV2, createSuccessResponse, createErrorResponse, ERROR_CODES } from "../_shared/api-helpers.ts";
 import { authenticateRequest, isResponse } from "../_shared/auth.ts";
 import { withSentry } from "../_shared/sentry.ts";
+import { createLogger } from "../_shared/logger.ts";
+
+const log = createLogger("dashboard-stats");
 
 serve(withSentry("dashboard-stats", async (req: Request) => {
   const corsResponse = handleCorsV2(req);
@@ -16,6 +19,7 @@ serve(withSentry("dashboard-stats", async (req: Request) => {
   const { user, client } = auth;
 
   try {
+    log.info("fetching stats", { userId: user.id });
     const [projectsRes, modulesRes, keysRes, bugsRes, recentRes] = await Promise.all([
       client.from("projects").select("id", { count: "exact", head: true }).eq("user_id", user.id),
       client.from("vault_modules").select("id", { count: "exact", head: true }).eq("user_id", user.id),

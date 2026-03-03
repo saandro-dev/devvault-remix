@@ -9,8 +9,11 @@
  */
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createLogger } from "./logger.ts";
 
 export type AppRole = "owner" | "admin" | "moderator" | "user";
+
+const log = createLogger("role-validator");
 
 const ROLE_HIERARCHY: Record<AppRole, number> = {
   owner: 1,
@@ -32,7 +35,7 @@ export async function getUserRole(
   });
 
   if (error) {
-    console.error("[role-validator] Error fetching role:", error.message);
+    log.error("Failed to fetch user role", { userId, error: error.message });
     return "user";
   }
 
