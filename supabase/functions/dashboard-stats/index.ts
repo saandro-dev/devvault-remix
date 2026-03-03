@@ -1,8 +1,9 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { handleCorsV2, createSuccessResponse, createErrorResponse, ERROR_CODES } from "../_shared/api-helpers.ts";
 import { authenticateRequest, isResponse } from "../_shared/auth.ts";
+import { withSentry } from "../_shared/sentry.ts";
 
-serve(async (req) => {
+serve(withSentry("dashboard-stats", async (req: Request) => {
   const corsResponse = handleCorsV2(req);
   if (corsResponse) return corsResponse;
 
@@ -33,7 +34,6 @@ serve(async (req) => {
       recentProjects: recentRes.data ?? [],
     });
   } catch (err) {
-    console.error("[dashboard-stats]", err.message);
-    return createErrorResponse(req, ERROR_CODES.INTERNAL_ERROR, err.message, 500);
+    throw err;
   }
-});
+}));
