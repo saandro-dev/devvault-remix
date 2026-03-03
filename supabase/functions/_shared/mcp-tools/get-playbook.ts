@@ -9,6 +9,7 @@
  */
 
 import { createLogger } from "../logger.ts";
+import { errorResponse, classifyRpcError } from "./error-helpers.ts";
 import { trackUsage } from "./usage-tracker.ts";
 import type { ToolRegistrar } from "./types.ts";
 
@@ -65,7 +66,7 @@ async function handleListMode(
 
   if (error) {
     logger.error("list playbooks failed", { error: error.message });
-    return { content: [{ type: "text", text: `Error: ${error.message}` }] };
+    return errorResponse({ code: classifyRpcError(error.message), message: error.message });
   }
 
   if (!playbooks || playbooks.length === 0) {
@@ -134,12 +135,7 @@ async function handleDetailMode(
   if (pbError || !playbook) {
     const identifier = filter.slug || filter.id;
     logger.error("playbook not found", { identifier, error: pbError?.message });
-    return {
-      content: [{
-        type: "text",
-        text: `Playbook not found: ${identifier}. Use devvault_get_playbook() without params to list available playbooks.`,
-      }],
-    };
+    return errorResponse({ code: "PLAYBOOK_NOT_FOUND", message: `Playbook not found: ${identifier}.` });
   }
 
   // Fetch junction entries ordered by position
@@ -151,7 +147,7 @@ async function handleDetailMode(
 
   if (jError) {
     logger.error("fetch playbook modules failed", { error: jError.message });
-    return { content: [{ type: "text", text: `Error fetching modules: ${jError.message}` }] };
+    return errorResponse({ code: classifyRpcError(jError.message), message: `Error fetching playbook modules: ${jError.message}` });
   }
 
   if (!junctions || junctions.length === 0) {
@@ -181,7 +177,7 @@ async function handleDetailMode(
 
   if (mError) {
     logger.error("fetch modules failed", { error: mError.message });
-    return { content: [{ type: "text", text: `Error fetching modules: ${mError.message}` }] };
+    return errorResponse({ code: classifyRpcError(mError.message), message: `Error fetching modules: ${mError.message}` });
   }
 
   // Build module map for ordering

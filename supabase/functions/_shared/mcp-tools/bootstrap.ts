@@ -11,6 +11,7 @@
  */
 
 import { createLogger } from "../logger.ts";
+import { errorResponse, classifyRpcError } from "./error-helpers.ts";
 import type { ToolRegistrar } from "./types.ts";
 
 const logger = createLogger("mcp-tool:bootstrap");
@@ -157,7 +158,7 @@ export const registerBootstrapTool: ToolRegistrar = (server, client) => {
         });
         if (error) {
           logger.error("bootstrap failed", { error: error.message });
-          return { content: [{ type: "text", text: `Error: ${error.message}` }] };
+          return errorResponse({ code: classifyRpcError(error.message), message: error.message });
         }
 
         // Fetch published playbooks index
@@ -207,7 +208,7 @@ export const registerBootstrapTool: ToolRegistrar = (server, client) => {
         return { content: [{ type: "text", text: JSON.stringify(response, null, 2) }] };
       } catch (err) {
         logger.error("uncaught error", { error: String(err) });
-        return { content: [{ type: "text", text: `Uncaught error: ${String(err)}` }] };
+        return errorResponse({ code: "INTERNAL_ERROR", message: String(err) });
       }
     },
   });

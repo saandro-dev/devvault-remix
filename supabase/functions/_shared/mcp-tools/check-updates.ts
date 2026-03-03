@@ -7,6 +7,7 @@
  */
 
 import { createLogger } from "../logger.ts";
+import { errorResponse, classifyRpcError } from "./error-helpers.ts";
 import { trackUsage } from "./usage-tracker.ts";
 import type { ToolRegistrar } from "./types.ts";
 
@@ -61,15 +62,11 @@ export const registerCheckUpdatesTool: ToolRegistrar = (server, client, auth) =>
       const modules = params.modules as ModuleVersionInput[] | undefined;
 
       if (!modules || modules.length === 0) {
-        return {
-          content: [{ type: "text", text: "Error: Provide at least one module in 'modules' array" }],
-        };
+        return errorResponse({ code: "INVALID_INPUT", message: "Provide at least one module in 'modules' array." });
       }
 
       if (modules.length > 50) {
-        return {
-          content: [{ type: "text", text: "Error: Maximum 50 modules per check" }],
-        };
+        return errorResponse({ code: "INVALID_INPUT", message: "Maximum 50 modules per check." });
       }
 
       const slugs = modules.map((m) => m.slug);
@@ -83,9 +80,7 @@ export const registerCheckUpdatesTool: ToolRegistrar = (server, client, auth) =>
 
       if (error) {
         logger.error("check_updates failed", { error: error.message });
-        return {
-          content: [{ type: "text", text: `Error: ${error.message}` }],
-        };
+        return errorResponse({ code: classifyRpcError(error.message), message: error.message });
       }
 
       const vaultMap = new Map(

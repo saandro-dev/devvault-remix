@@ -7,6 +7,7 @@
 
 import { createLogger } from "../logger.ts";
 import { updateModuleEmbedding } from "../embedding-client.ts";
+import { errorResponse, classifyRpcError } from "./error-helpers.ts";
 import { getCompleteness } from "./completeness.ts";
 import type { ToolRegistrar } from "./types.ts";
 
@@ -69,7 +70,7 @@ export const registerUpdateTool: ToolRegistrar = (server, client, auth) => {
     },
     handler: async (params: Record<string, unknown>) => {
       if (!params.id && !params.slug) {
-        return { content: [{ type: "text", text: "Error: Provide either 'id' or 'slug'" }] };
+        return errorResponse({ code: "INVALID_INPUT", message: "Provide either 'id' or 'slug'." });
       }
 
       let moduleId = params.id as string | undefined;
@@ -80,7 +81,7 @@ export const registerUpdateTool: ToolRegistrar = (server, client, auth) => {
           .eq("slug", params.slug as string)
           .single();
         if (!found) {
-          return { content: [{ type: "text", text: `Module not found with slug: ${params.slug}` }] };
+          return errorResponse({ code: "MODULE_NOT_FOUND", message: `Module not found with slug: ${params.slug}` });
         }
         moduleId = found.id;
       }
@@ -91,7 +92,7 @@ export const registerUpdateTool: ToolRegistrar = (server, client, auth) => {
       }
 
       if (Object.keys(updateFields).length === 0) {
-        return { content: [{ type: "text", text: "Error: No fields to update" }] };
+        return errorResponse({ code: "INVALID_INPUT", message: "No fields to update. Provide at least one field from the inputSchema." });
       }
 
       const { data, error } = await client
@@ -103,7 +104,7 @@ export const registerUpdateTool: ToolRegistrar = (server, client, auth) => {
 
       if (error) {
         logger.error("update failed", { error: error.message });
-        return { content: [{ type: "text", text: `Error: ${error.message}` }] };
+        return errorResponse({ code: classifyRpcError(error.message), message: error.message });
       }
 
       // Re-generate embedding if any embedding-relevant field was updated

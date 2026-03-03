@@ -14,6 +14,7 @@
 
 import { createLogger } from "../logger.ts";
 import { generateEmbedding } from "../embedding-client.ts";
+import { errorResponse } from "./error-helpers.ts";
 import { trackUsage } from "./usage-tracker.ts";
 import type { ToolRegistrar } from "./types.ts";
 
@@ -162,7 +163,7 @@ export async function handleTroubleshooting(
     };
   } catch (err) {
     logger.error("uncaught error", { error: String(err) });
-    return { content: [{ type: "text", text: `Uncaught error: ${String(err)}` }] };
+    return errorResponse({ code: "INTERNAL_ERROR", message: String(err) });
   }
 }
 

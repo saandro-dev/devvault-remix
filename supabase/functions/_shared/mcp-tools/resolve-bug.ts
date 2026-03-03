@@ -7,6 +7,7 @@
  */
 
 import { createLogger } from "../logger.ts";
+import { errorResponse, classifyRpcError } from "./error-helpers.ts";
 import { trackUsage } from "./usage-tracker.ts";
 import { getCompleteness } from "./completeness.ts";
 import type { ToolRegistrar } from "./types.ts";
@@ -63,7 +64,7 @@ export const registerResolveBugTool: ToolRegistrar = (server, client, auth) => {
           .single();
 
         if (fetchError || !gap) {
-          return { content: [{ type: "text", text: `Error: Gap not found (${gapId})` }] };
+          return errorResponse({ code: "BUG_NOT_FOUND", message: `Gap not found (${gapId})` });
         }
 
         if (gap.status === "promoted_to_module") {
@@ -86,12 +87,7 @@ export const registerResolveBugTool: ToolRegistrar = (server, client, auth) => {
         // Promote to module if requested
         if (promote) {
           if (!moduleTitle) {
-            return {
-              content: [{
-                type: "text",
-                text: "Error: module_title is required when promote_to_module=true",
-              }],
-            };
+            return errorResponse({ code: "INVALID_INPUT", message: "module_title is required when promote_to_module=true." });
           }
 
           const moduleInsert: Record<string, unknown> = {
@@ -123,7 +119,7 @@ export const registerResolveBugTool: ToolRegistrar = (server, client, auth) => {
 
           if (modError) {
             logger.error("module promotion failed", { error: modError.message });
-            return { content: [{ type: "text", text: `Error promoting to module: ${modError.message}` }] };
+            return errorResponse({ code: classifyRpcError(modError.message), message: `Error promoting to module: ${modError.message}` });
           }
 
           promotedModule = mod;
@@ -150,7 +146,7 @@ export const registerResolveBugTool: ToolRegistrar = (server, client, auth) => {
 
         if (updateError) {
           logger.error("gap update failed", { error: updateError.message });
-          return { content: [{ type: "text", text: `Error updating gap: ${updateError.message}` }] };
+          return errorResponse({ code: classifyRpcError(updateError.message), message: `Error updating gap: ${updateError.message}` });
         }
 
         trackUsage(client, auth, {
@@ -183,7 +179,7 @@ export const registerResolveBugTool: ToolRegistrar = (server, client, auth) => {
         };
       } catch (err) {
         logger.error("uncaught error", { error: String(err) });
-        return { content: [{ type: "text", text: `Uncaught error: ${String(err)}` }] };
+        return errorResponse({ code: "INTERNAL_ERROR", message: String(err) });
       }
     },
   });

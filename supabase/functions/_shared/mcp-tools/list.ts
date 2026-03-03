@@ -6,6 +6,7 @@
  */
 
 import { createLogger } from "../logger.ts";
+import { errorResponse, classifyRpcError } from "./error-helpers.ts";
 import { trackUsage } from "./usage-tracker.ts";
 import type { ToolRegistrar } from "./types.ts";
 
@@ -60,7 +61,7 @@ export const registerListTool: ToolRegistrar = (server, client, auth) => {
 
         if (error) {
           logger.error("list failed", { error: error.message });
-          return { content: [{ type: "text", text: `Error: ${error.message}` }] };
+          return errorResponse({ code: classifyRpcError(error.message), message: error.message });
         }
 
         const rawModules = data as Record<string, unknown>[];
@@ -119,7 +120,7 @@ export const registerListTool: ToolRegistrar = (server, client, auth) => {
         };
       } catch (err) {
         logger.error("uncaught error", { error: String(err) });
-        return { content: [{ type: "text", text: `Uncaught error: ${String(err)}` }] };
+        return errorResponse({ code: "INTERNAL_ERROR", message: String(err) });
       }
     },
   });
