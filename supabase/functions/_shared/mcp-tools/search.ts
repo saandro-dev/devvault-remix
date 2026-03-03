@@ -149,7 +149,7 @@ export const registerSearchTool: ToolRegistrar = (server, client, auth) => {
         };
       } catch (err) {
         logger.error("uncaught error", { error: String(err) });
-        return { content: [{ type: "text", text: `Uncaught error: ${String(err)}` }] };
+        return errorResponse({ code: "INTERNAL_ERROR", message: String(err) });
       }
     },
   });

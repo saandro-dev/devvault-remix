@@ -6,6 +6,7 @@
  */
 
 import { createLogger } from "../logger.ts";
+import { errorResponse, classifyRpcError } from "./error-helpers.ts";
 import { getCompleteness } from "./completeness.ts";
 import { trackUsage } from "./usage-tracker.ts";
 import type { ToolRegistrar } from "./types.ts";
@@ -113,7 +114,7 @@ export const registerValidateTool: ToolRegistrar = (server, client, auth) => {
           .limit(limit);
 
         if (error) {
-          return { content: [{ type: "text", text: `Error: ${error.message}` }] };
+          return errorResponse({ code: classifyRpcError(error.message), message: error.message });
         }
 
         const results = await Promise.all(
@@ -165,7 +166,7 @@ export const registerValidateTool: ToolRegistrar = (server, client, auth) => {
           .single();
 
         if (!found) {
-          return { content: [{ type: "text", text: `Module not found with slug: ${moduleId}` }] };
+          return errorResponse({ code: "MODULE_NOT_FOUND", message: `Module not found with slug: ${moduleId}` });
         }
         moduleId = found.id;
       }

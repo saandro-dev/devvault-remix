@@ -7,6 +7,7 @@
  */
 
 import { createLogger } from "../logger.ts";
+import { errorResponse, classifyRpcError } from "./error-helpers.ts";
 import { trackUsage } from "./usage-tracker.ts";
 import { getCompleteness } from "./completeness.ts";
 import type { ToolRegistrar } from "./types.ts";
@@ -97,7 +98,7 @@ export const registerReportSuccessTool: ToolRegistrar = (server, client, auth) =
 
         if (error) {
           logger.error("insert failed", { error: error.message });
-          return { content: [{ type: "text", text: `Error: ${error.message}` }] };
+          return errorResponse({ code: classifyRpcError(error.message), message: error.message });
         }
 
         const completeness = await getCompleteness(client, data.id);
@@ -125,7 +126,7 @@ export const registerReportSuccessTool: ToolRegistrar = (server, client, auth) =
         };
       } catch (err) {
         logger.error("uncaught error", { error: String(err) });
-        return { content: [{ type: "text", text: `Uncaught error: ${String(err)}` }] };
+        return errorResponse({ code: "INTERNAL_ERROR", message: String(err) });
       }
     },
   });

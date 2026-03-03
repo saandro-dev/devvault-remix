@@ -6,6 +6,7 @@
  */
 
 import { createLogger } from "../logger.ts";
+import { errorResponse, classifyRpcError } from "./error-helpers.ts";
 import type { ToolRegistrar } from "./types.ts";
 
 const logger = createLogger("mcp-tool:delete");
@@ -47,7 +48,7 @@ export const registerDeleteTool: ToolRegistrar = (server, client, auth) => {
             .eq("slug", identifier)
             .single();
           if (!found) {
-            return { content: [{ type: "text", text: `Module not found with slug: ${identifier}` }] };
+            return errorResponse({ code: "MODULE_NOT_FOUND", message: `Module not found with slug: ${identifier}` });
           }
           moduleId = found.id;
         }
@@ -61,7 +62,7 @@ export const registerDeleteTool: ToolRegistrar = (server, client, auth) => {
           .maybeSingle();
 
         if (!ownerCheck) {
-          return { content: [{ type: "text", text: "Module not found or not owned by you" }] };
+          return errorResponse({ code: "PERMISSION_DENIED", message: "Module not found or not owned by you." });
         }
 
         if (hardDelete) {
@@ -72,7 +73,7 @@ export const registerDeleteTool: ToolRegistrar = (server, client, auth) => {
 
           if (error) {
             logger.error("hard delete failed", { error: error.message, moduleId });
-            return { content: [{ type: "text", text: `Error: ${error.message}` }] };
+            return errorResponse({ code: classifyRpcError(error.message), message: error.message });
           }
 
           logger.info("module hard deleted", { moduleId, title: ownerCheck.title });
@@ -99,7 +100,7 @@ export const registerDeleteTool: ToolRegistrar = (server, client, auth) => {
 
         if (error) {
           logger.error("soft delete failed", { error: error.message, moduleId });
-          return { content: [{ type: "text", text: `Error: ${error.message}` }] };
+          return errorResponse({ code: classifyRpcError(error.message), message: error.message });
         }
 
         logger.info("module soft deleted (deprecated)", { moduleId, title: data.title });
@@ -118,7 +119,7 @@ export const registerDeleteTool: ToolRegistrar = (server, client, auth) => {
         };
       } catch (err) {
         logger.error("uncaught error", { error: String(err) });
-        return { content: [{ type: "text", text: `Uncaught error: ${String(err)}` }] };
+        return errorResponse({ code: "INTERNAL_ERROR", message: String(err) });
       }
     },
   });

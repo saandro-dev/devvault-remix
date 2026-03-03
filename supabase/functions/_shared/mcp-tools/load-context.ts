@@ -6,6 +6,7 @@
  */
 
 import { createLogger } from "../logger.ts";
+import { errorResponse, classifyRpcError } from "./error-helpers.ts";
 import { trackUsage } from "./usage-tracker.ts";
 import type { ToolRegistrar } from "./types.ts";
 
@@ -91,7 +92,7 @@ async function handleTagDiscovery(
 
   const { data: modules, error } = await query;
   if (error) {
-    return { content: [{ type: "text", text: `Error: ${error.message}` }] };
+    return errorResponse({ code: classifyRpcError(error.message), message: error.message });
   }
 
   const moduleList = (modules ?? []) as Record<string, unknown>[];
@@ -146,7 +147,7 @@ async function handleProjectDiscovery(client: Parameters<ToolRegistrar>[1]) {
     .not("source_project", "eq", "");
 
   if (error) {
-    return { content: [{ type: "text", text: `Error: ${error.message}` }] };
+    return errorResponse({ code: classifyRpcError(error.message), message: error.message });
   }
 
   // Aggregate projects with counts and top tags
@@ -215,7 +216,7 @@ async function handleProjectLoad(
 
   const { data: modules, error } = await query;
   if (error) {
-    return { content: [{ type: "text", text: `Error: ${error.message}` }] };
+    return errorResponse({ code: classifyRpcError(error.message), message: error.message });
   }
 
   const moduleList = (modules ?? []) as Record<string, unknown>[];
