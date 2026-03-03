@@ -1,73 +1,99 @@
 
-# DevVault — Project Completion Report
 
-> **Status:** ✅ COMPLETE — All systems operational, zero debt
-> **Date:** 2026-03-03
-> **Protocol:** DevVault Architect Protocol V1.1
+# Plano: Otimizar DevVault para Experiência Zero-Fricção de Agentes IA
 
----
+## Diagnóstico das Dificuldades Reais
 
-## Final Metrics
+Após investigação profunda do codebase, identifiquei **5 pontos de fricção** que agentes enfrentam:
 
-| Metric | Value |
-|---|---|
-| Vault modules (global) | **703** |
-| Modules at completeness score 100 | **703/703** |
-| Knowledge gaps open | **0** |
-| MCP tools | **25** |
-| Edge Functions | **16** |
-| Backfill strategies | **5** |
-| Protocol compliance (Section 4) | **PASS** |
-| Protocol compliance (Section 5.5) | **PASS** |
-| Dead code in production paths | **0** |
+### 1. Protocol Version Mismatch (Intermitente)
+O `mcp-lite@0.10.0` é a versão mais recente disponível no npm. Agentes com clientes MCP mais novos (protocolo `2025-11-25`) podem receber `400 Bad Request` no GET/SSE, enquanto POST funciona via fallback. Não há upgrade possível da lib — precisa de handler customizado.
 
----
+### 2. Mensagens de Erro Opacas
+Quando uma tool falha (ex: RPC error, module not found), o agente recebe `Error: <mensagem crua>` sem contexto de recuperação. O agente não sabe **o que fazer em seguida**.
 
-## Completed Phases
+### 3. `devvault_ingest` Aceita Módulos Incompletos Silenciosamente
+O agente ingere um módulo com apenas `title` e `code`, recebe `success: true`, e o módulo fica com score 30/100. Não há **bloqueio proativo** nem **missing_fields na resposta de ingestão** antes de salvar.
 
-| Phase | Description | Status |
-|---|---|---|
-| 1 | Core CRUD + Auth (JWT + API Keys) | ✅ Done |
-| 2 | MCP Server v1 (10 tools) | ✅ Done |
-| 3 | Hybrid Search (pgvector + tsvector + pg_trgm) | ✅ Done |
-| 4 | MCP Tools Expansion (25 tools) | ✅ Done |
-| 5 | Playbooks, Task Tracking, Validate | ✅ Done |
-| 5A | Playbook Population Backfill | ✅ Done |
-| 6 | SQL-Native Diagnose Architecture | ✅ Done |
-| 6.1 | Unified Backfill Engine (Strategy Pattern) | ✅ Done |
+### 4. `devvault_search` Não Orienta o Agente em Busca Vazia
+Quando a busca retorna 0 resultados, o agente recebe apenas `total_results: 0` sem sugestões de termos alternativos, domínios disponíveis, ou próximos passos.
+
+### 5. Bootstrap Retorna Dados Demais sem Priorização
+O `_agent_guide` tem 25 tools listadas de uma vez. Agentes com contexto limitado podem não absorver tudo. Falta um **quick_reference** condensado.
 
 ---
 
-## Backfill Strategies (All Executed)
+## Plano de Correções (5 ações)
 
-| Strategy | Action | Method | Result |
-|---|---|---|---|
-| diagnose-fields | `common_errors` + `solves_problems` | GPT-4o-mini | 703/703 modules |
-| context-fields | `context_markdown` + `test_code` | GPT-4o-mini | 703/703 modules |
-| changelog-seed | v1 changelog entries | Pure SQL | 703/703 modules |
-| embeddings | vector embeddings | OpenAI text-embedding-3-small | 703/703 modules |
-| auto-dependencies | cross-module dependency links | SQL + heuristics | 703/703 modules |
+### Ação 1: Respostas de Erro Acionáveis em Todas as Tools
+**Arquivo:** `supabase/functions/_shared/mcp-tools/` (todos os handlers)
+
+Criar um helper `errorResponse()` que retorne não apenas a mensagem de erro, mas também:
+- `_recovery_hint`: o que o agente deve fazer (ex: "Module not found. Try devvault_search to find by keyword.")
+- `_error_code`: código padronizado (ex: `MODULE_NOT_FOUND`, `INVALID_SLUG`, `RPC_FAILURE`)
+
+Criar arquivo `supabase/functions/_shared/mcp-tools/error-helpers.ts` com factory de respostas de erro padronizadas.
+
+### Ação 2: Validação Proativa no `devvault_ingest`
+**Arquivo:** `supabase/functions/_shared/mcp-tools/ingest.ts`
+
+Antes de inserir no banco, calcular `missing_fields` e retornar na resposta:
+- Se score < 50: retornar `_quality_warning: "critical"` com lista de campos faltantes
+- Se score < 80: retornar `_quality_warning: "low"` 
+- Adicionar campo `_missing_for_100` na resposta SEMPRE
+
+Isso não bloqueia a ingestão (agentes precisam de flexibilidade), mas torna impossível ignorar a incompletude.
+
+### Ação 3: Fallback Inteligente no `devvault_search` para Busca Vazia
+**Arquivo:** `supabase/functions/_shared/mcp-tools/search.ts`
+
+Quando `total_results === 0`:
+- Retornar `_suggestions.available_domains` com contagem de módulos por domínio
+- Retornar `_suggestions.similar_tags` — tags que mais se aproximam dos termos buscados
+- Retornar `_suggestions.try_diagnose` — sugerir `devvault_diagnose` se o query parece ser uma mensagem de erro
+
+### Ação 4: Quick Reference Condensado no Bootstrap
+**Arquivo:** `supabase/functions/_shared/mcp-tools/bootstrap.ts`
+
+Adicionar um `_quick_reference` no topo da resposta com as 5 tools mais usadas e seus one-liners, ANTES do `_agent_guide` completo. Agentes com contexto limitado conseguem operar com apenas isso:
+
+```json
+{
+  "_quick_reference": {
+    "search": "devvault_search({query: 'seu problema'})",
+    "get": "devvault_get({slug: 'module-slug'})",
+    "diagnose": "devvault_diagnose({error_message: 'erro literal'})",
+    "ingest": "devvault_ingest({title, code, why_it_matters, ...})",
+    "list": "devvault_list({domain: 'backend'})"
+  }
+}
+```
+
+### Ação 5: Suporte Multi-Protocol Version no Transport
+**Arquivo:** `supabase/functions/devvault-mcp/index.ts`
+
+Adicionar middleware que intercepta o header `MCP-Protocol-Version` e:
+- Se o servidor não suporta a versão requisitada, retornar resposta JSON-RPC válida com `supported_versions` em vez de `400 Bad Request` cru
+- Logar a versão requisitada para monitorar quando upgrade for necessário
 
 ---
 
-## Protocol Section 4 Compliance (Vibe Coding)
+## Arquivos Afetados
 
-| Check | Result |
-|---|---|
-| 4.1 Zero Remendos — No `!important`, no silenced catch, no TODO/FIXME | ✅ PASS |
-| 4.2 Arquiteto Antes de Pedreiro — Strategy Pattern, SQL-native matching | ✅ PASS |
-| 4.3 MVP Arquitetural — New backfill = 1 file, new MCP tool = 1 file + 1 line | ✅ PASS |
-| 4.4 Dívida Técnica Zero — Zero workarounds, zero legacy | ✅ PASS |
+```text
+supabase/functions/_shared/mcp-tools/
+├── error-helpers.ts          (NOVO — factory de respostas de erro)
+├── bootstrap.ts              (EDITAR — adicionar _quick_reference)
+├── ingest.ts                 (EDITAR — validação proativa + _missing_for_100)
+├── search.ts                 (EDITAR — fallback inteligente para busca vazia)
+supabase/functions/devvault-mcp/
+├── index.ts                  (EDITAR — middleware de protocol version)
+```
 
----
+## Prioridade de Implementação
+1. **error-helpers.ts** + aplicar em `get.ts` e `ingest.ts` (maior impacto imediato)
+2. **ingest.ts** validação proativa (previne módulos de baixa qualidade)
+3. **search.ts** fallback inteligente (resolve frustração de busca vazia)
+4. **bootstrap.ts** quick reference (melhora onboarding)
+5. **index.ts** protocol version (estabilidade de conexão)
 
-## Security Module Enrichment (2026-03-03)
-
-5 critical security modules enriched with 25 literal PostgreSQL error strings in `common_errors`:
-- `infinite recursion detected in policy for relation`
-- `new row violates row-level security policy`
-- `JWT expired`
-- `permission denied for schema vault`
-- And 21 more exact-match error strings
-
-Impact: `match_common_errors` RPC now returns exact matches (relevance 0.95+) for common RLS and auth failures.
