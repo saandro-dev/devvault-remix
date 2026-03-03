@@ -8,7 +8,7 @@
 
 import { createLogger } from "../logger.ts";
 import { trackUsage } from "./usage-tracker.ts";
-import { errorResponse, classifyRpcError } from "./error-helpers.ts";
+import { errorResponse } from "./error-helpers.ts";
 import type { ToolRegistrar } from "./types.ts";
 
 const logger = createLogger("mcp-tool:stats");

@@ -12,7 +12,7 @@
 ╔═══════════════════════════════════════════════════════════════╗
 ║  ✅ DEVVAULT PROTOCOL V2 - 10.0/10 - DUAL-AUTH ARCHITECTURE   ║
 ║     16 Edge Functions | 2 Auth Systems | Zero Legacy Code      ║
-║     MCP Server v6.0: 25 Tools | SQL-Native Diagnose + Tree    ║
+║     MCP Server v6.1: 28 Tools | SQL-Native Diagnose + Tree    ║
 ║     Phase 3: Hybrid Search (pgvector + tsvector + pg_trgm)     ║
 ║     Phase 6: SQL-Native Matching + Domain Inference            ║
 ║     Phase 6.1: Unified Backfill Engine (Strategy Pattern)      ║
@@ -25,9 +25,39 @@
 
 ---
 
-## v6.1 Changelog (2026-03-02)
+## v6.1 Changelog (2026-03-03)
 
-### Phase 6.1: Unified Backfill Engine
+### Phase 6.1: MCP Tools Expansion (25 → 28 Tools)
+
+Extended the MCP server with 3 new tools and 4 enhancements to prepare for mass content ingestion.
+
+### New MCP Tools (+3, total 28)
+- **devvault_batch_ingest (Tool 26):** Batch ingestion of up to 20 modules per call with parallel embedding generation, duplicate detection (cosine similarity >0.92), and aggregated results. Returns per-module status (created/duplicate_warning/error).
+- **devvault_similar (Tool 27):** Vector similarity search given a `module_id`. Uses `find_similar_modules` RPC with configurable `threshold` (default 0.75) and `limit` (default 5). Returns similar modules ranked by cosine similarity score.
+- **devvault_stats (Tool 28):** Vault health metrics — total modules, breakdown by status (draft/validated/deprecated), by domain, modules without embeddings, and recent activity count (7 days).
+
+### New SQL Functions (+1)
+- **`find_similar_modules(p_module_id, p_limit, p_threshold)`:** Cosine similarity search using pgvector `<=>` operator. Returns modules above the similarity threshold, excluding the source module. Includes domain, tags, module_type, and similarity_score.
+
+### Enhancements
+- **devvault_ingest:** Now detects potential duplicates before insertion via embedding similarity check (>0.92 threshold). Returns `_potential_duplicates` warning array without blocking creation. Also now calls `trackUsage`.
+- **devvault_update:** Added `append_tags`, `append_solves_problems`, and `append_common_errors` parameters for atomic array/JSONB append operations. Eliminates read-modify-write race conditions.
+- **devvault_get:** Now returns `_usage_stats` metadata (times_fetched, times_used_in_tasks, success_reports) from `vault_usage_events` and `vault_agent_tasks`.
+- **devvault_delete:** Now calls `trackUsage` for audit trail completeness.
+- **usage-tracker.ts:** Expanded `UsageEventType` union to 29 types covering all 28 tools.
+
+### Architectural Impact
+- Mass ingestion ready: agents can ingest 20 modules per call instead of 1
+- Duplicate prevention: automatic similarity warning before insert
+- Discovery: agents can navigate by similarity, not just search
+- Vault health visibility: agents can assess coverage gaps via stats
+- Zero race conditions: array append operations are atomic
+
+---
+
+## v6.0.1 Changelog (2026-03-02)
+
+### Phase 6.0.1: Unified Backfill Engine
 
 Replaced 3 inconsistent one-shot backfill functions with a single unified `vault-backfill` Edge Function powered by a reusable **Strategy Pattern** engine.
 
@@ -208,7 +238,7 @@ To limit the "blast radius" in case of a key leak, the system uses two service k
 | `vault-crud` | Internal (JWT) | general | **Main BFF for the Vault.** Performs all CRUD operations on the user's knowledge modules. **Actions:** `list`, `get`, `create`, `update`, `delete`, `search`, `get_playbook`, `share`, `unshare`, `list_shares`, `add_dependency`, `remove_dependency`, `list_dependencies`. |
 | `vault-query` | External (API Key) | general | **Public READ endpoint for Agents.** Allows external systems to query the knowledge graph. **Actions:** `bootstrap`, `search`, `get`, `list`, `list_domains`. |
 | `vault-ingest` | External (API Key) | general | **Public WRITE endpoint for Agents.** Allows external systems to create, update, and delete modules. **Actions:** `ingest` (single/batch creation), `update`, `delete`. |
-| `devvault-mcp` | External (API Key) | general | **MCP Server (Model Context Protocol) for AI Agents (v6.0).** Exposes a structured API with tools to interact with the Vault. **Tools (25):** `devvault_bootstrap`, `devvault_search`, `devvault_get`, `devvault_list`, `devvault_domains`, `devvault_ingest`, `devvault_update`, `devvault_get_group`, `devvault_validate`, `devvault_delete`, `devvault_diagnose`, `devvault_report_bug`, `devvault_resolve_bug`, `devvault_report_success`, `devvault_export_tree`, `devvault_check_updates`, `devvault_load_context`, `devvault_quickstart`, `devvault_changelog`, `devvault_diary_bug`, `devvault_diary_resolve`, `devvault_diary_list`, `devvault_get_playbook`, `devvault_task_start`, `devvault_task_end`. **v6.0:** SQL-native diagnose architecture — `match_common_errors`, `match_solves_problems`, `infer_domain_from_text` RPCs replace JS matching. Domain-aware `vault_module_completeness` with explicit v_total. |
+| `devvault-mcp` | External (API Key) | general | **MCP Server (Model Context Protocol) for AI Agents (v6.1).** Exposes a structured API with tools to interact with the Vault. **Tools (28):** `devvault_bootstrap`, `devvault_search`, `devvault_get`, `devvault_list`, `devvault_domains`, `devvault_ingest`, `devvault_update`, `devvault_get_group`, `devvault_validate`, `devvault_delete`, `devvault_diagnose`, `devvault_report_bug`, `devvault_resolve_bug`, `devvault_report_success`, `devvault_export_tree`, `devvault_check_updates`, `devvault_load_context`, `devvault_quickstart`, `devvault_changelog`, `devvault_diary_bug`, `devvault_diary_resolve`, `devvault_diary_list`, `devvault_get_playbook`, `devvault_task_start`, `devvault_task_end`, `devvault_batch_ingest`, `devvault_similar`, `devvault_stats`. **v6.1:** Added batch ingestion (up to 20 modules/call), vector similarity search, vault health metrics, duplicate detection on ingest (>0.92 cosine), atomic array append operations on update, and usage stats on get. **v6.0:** SQL-native diagnose architecture — `match_common_errors`, `match_solves_problems`, `infer_domain_from_text` RPCs replace JS matching. Domain-aware `vault_module_completeness` with explicit v_total. |
 
 ### Entity Management
 
