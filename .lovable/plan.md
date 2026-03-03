@@ -1,72 +1,92 @@
 
 
-# Plano: Preencher Dependencies dos 424 Modulos (92% → 100%)
+# Audit Report: DevVault — Protocol Compliance & Code Health
 
-## Diagnostico
+## 1. Data Validation (SUCCESS)
 
-- **424 modulos** com `implementation_order > 1` dentro de `module_group` nao possuem nenhum registro em `vault_module_dependencies`.
-- **167 grupos** distintos, alguns com `implementation_order` duplicados (ex: 2 modulos com order=3 no mesmo grupo).
-- A funcao `vault_module_completeness` exige apenas `EXISTS(SELECT 1 FROM vault_module_dependencies WHERE module_id = ?)` — basta **1 dependencia** por modulo.
-- Constraint `uq_module_dependency (module_id, depends_on_id)` + `chk_no_self_reference` ja existem, protegendo contra duplicatas e auto-referencia.
+| Metric | Result |
+|---|---|
+| Knowledge gaps open | **0** (1 resolved) |
+| Modules with score 100 | **703/703** |
+| Modules with common_errors populated | **703/703** |
+| Modules with solves_problems populated | **703/703** |
+| Enriched security modules (literal errors) | **5 modules, 25 entries total** |
 
-## Estrategia: SQL Puro via Nova Backfill Strategy
+All backfills completed. Zero data gaps.
 
-A logica e deterministica (sem IA): cada modulo com `implementation_order = N` depende de **um** modulo com `implementation_order = N-1` do mesmo `module_group`. Quando existem multiplos modulos no order anterior (duplicatas), selecionamos apenas um via `DISTINCT ON`.
+---
 
-### Logica SQL Core
+## 2. Protocol Section 4 Compliance (Vibe Coding / Anti-Reactive)
 
-```text
-Para cada modulo M onde:
-  - visibility = 'global'
-  - module_group IS NOT NULL
-  - implementation_order > 1
-  - Nao possui nenhuma dependencia registrada
+### 4.1 Zero Remendos — PASS
+- No `!important` in CSS (0 matches)
+- No silenced catch blocks (0 matches)
+- No `TODO`, `FIXME`, `HACK`, `WORKAROUND` in production code (the only `"todo"` match is inside a validation function in `context-fields.ts` that *detects* placeholder test code — correct usage, not a band-aid)
 
-Inserir 1 dependencia:
-  M → modulo P (mesmo module_group, implementation_order = M.order - 1)
-  
-Se existem multiplos P, escolher o mais recente (updated_at DESC).
-Usar ON CONFLICT DO NOTHING para seguranca.
-```
+### 4.2 Arquiteto Antes de Pedreiro — PASS
+- Strategy Pattern for backfills (5 strategies, 1 engine)
+- SQL-native matching (RPCs replace JS logic)
+- Clean separation: orchestrator (`diagnose.ts`) delegates to `diagnose-troubleshoot.ts`
 
-## Implementacao (2 arquivos)
+### 4.3 MVP Arquitetural — PASS
+- Architecture supports V2/V3: adding a new backfill = 1 file. Adding a new MCP tool = 1 file + 1 line in `register.ts`
+- Hybrid search (pgvector + tsvector + pg_trgm) scales to millions of modules
 
-### 1. Nova Strategy: `supabase/functions/_shared/backfill-strategies/auto-dependencies.ts`
+### 4.4 Divida Tecnica Zero — PASS with 3 findings (see below)
 
-Cria um `BackfillStrategy` seguindo o padrao existente (Strategy Pattern do backfill engine):
+---
 
-- **`fetchCandidates`**: Busca os 424 modulos que tem `module_group` + `implementation_order > 1` + zero deps.
-- **`process`**: Para cada modulo, encontra o predecessor (mesmo grupo, order - 1) via query SQL. Retorna `{ depends_on_id }`.
-- **`validate`**: Verifica que `depends_on_id` foi encontrado.
-- **`persist`**: Insere o registro em `vault_module_dependencies` com `ON CONFLICT DO NOTHING`.
-- **Config**: Usa `DEFAULT_DATA_CONFIG` (sem delay, batch 50, sem IA).
+## 3. Dead Code / Legacy Issues Found
 
-### 2. Registrar no `supabase/functions/vault-backfill/index.ts`
+### Issue 1: `plan.md` is stale
+The file `.lovable/plan.md` still contains the plan for the `auto-dependencies` backfill (which was already executed successfully). It should be updated to reflect the current state of completion.
 
-Adicionar `"auto-dependencies"` ao `STRATEGY_MAP`:
+### Issue 2: README.md says "22 tools" — actual count is 25
+Two locations in `README.md` reference "22 structured tools" and "22 tools". The MCP server has **25 tools** (confirmed in `register.ts` and `EDGE_FUNCTIONS_REGISTRY.md`). The README was not updated after tools 23-25 were added (devvault_get_playbook, devvault_task_start, devvault_task_end).
 
-```text
-STRATEGY_MAP["auto-dependencies"] = {
-  strategy: autoDependenciesStrategy,
-  config: DEFAULT_DATA_CONFIG
-}
-```
+### Issue 3: `EDGE_FUNCTIONS_REGISTRY.md` missing `auto-dependencies` action
+The `vault-backfill` entry in the registry lists 4 actions (diagnose-fields, context-fields, changelog-seed, embeddings) but `auto-dependencies` (the 5th strategy) is not documented.
 
-## Execucao
+### Issue 4: `VAULT_CONTENT_STANDARDS.md` date is stale
+Last updated says `2026-02-28` but significant changes were made on 2026-03-02 and 2026-03-03 (common_errors enrichment, dependencies, etc.).
 
-Apos o deploy, basta uma unica chamada:
+---
 
-```text
-POST /vault-backfill
-{ "action": "auto-dependencies", "limit": 500 }
-```
+## 4. Protocol Section 5.5 Compliance (Zero DB Access from Frontend)
 
-Resultado esperado: ~424 insercoes, zero falhas, todos os modulos passam para score 100%.
+**PASS** — Zero matches for `supabase.from(` in `src/`. All data access goes through `invokeEdgeFunction()`.
 
-## Secao Tecnica
+---
 
-- **Sem IA, sem custo**: Operacao puramente SQL, instantanea.
-- **Idempotente**: `ON CONFLICT DO NOTHING` + check de `NOT EXISTS` no fetch garante re-execucao segura.
-- **Segue o padrao existente**: Reutiliza o backfill engine, strategy pattern, logger, config — zero codigo ad-hoc.
-- **Tempo estimado**: ~2 segundos de execucao total para os 424 modulos.
+## 5. Code Hygiene (Section 5.4)
+
+- No files over 300 lines in `src/` (spot-checked key modules)
+- `console.log()` in `src/` only appears inside documentation examples (`apiReference.ts` — code strings shown to users, not runtime logging)
+- Frontend uses structured logger (`src/lib/logger.ts`)
+- Backend uses structured logger (`supabase/functions/_shared/logger.ts`)
+- English naming throughout
+
+---
+
+## 6. Remediation Plan
+
+4 documentation-only fixes required. Zero code changes. Zero architectural changes.
+
+### Fix 1: Update `plan.md`
+Replace the stale auto-dependencies plan with a completion summary documenting all 5 backfill phases completed, 703 modules at 100%, and 0 knowledge gaps.
+
+### Fix 2: Update `README.md`
+Change "22 structured tools" and "22 tools" to "25" in two locations. Add the 3 missing tools to the tools reference table (devvault_get_playbook, devvault_task_start, devvault_task_end). Add Task Tracking category to the table.
+
+### Fix 3: Update `EDGE_FUNCTIONS_REGISTRY.md`
+Add `auto-dependencies` to the vault-backfill actions description. Update the date to 2026-03-03.
+
+### Fix 4: Update `VAULT_CONTENT_STANDARDS.md`
+Update "Last updated" to 2026-03-03.
+
+---
+
+## Verdict
+
+The DevVault codebase is architecturally sound and follows Protocol V1.1 Section 4 rigorously. Zero band-aids, zero workarounds, zero dead code in production paths. The only debt is **4 stale documentation references** — all fixable in a single pass with zero risk.
 
