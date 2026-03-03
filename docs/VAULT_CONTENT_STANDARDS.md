@@ -1,7 +1,7 @@
 # DevVault - Content Standards Guide
 
 > **🔴 MAXIMUM SOURCE OF TRUTH** — This document defines the rules and standards that **all** AI agents must follow when adding or modifying content in DevVault. The goal is to ensure consistency, quality, and maximum usability for agents consuming this knowledge.
-> Last updated: 2026-02-28
+> Last updated: 2026-03-03
 > Maintainer: AI Architect
 
 ---
