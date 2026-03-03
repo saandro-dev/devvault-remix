@@ -12,7 +12,7 @@
 ╔═══════════════════════════════════════════════════════════════╗
 ║  ✅ DEVVAULT PROTOCOL V2 - 10.0/10 - DUAL-AUTH ARCHITECTURE   ║
 ║     16 Edge Functions | 2 Auth Systems | Zero Legacy Code      ║
-║     MCP Server v6.1: 28 Tools | SQL-Native Diagnose + Tree    ║
+║     MCP Server v6.2: 29 Tools | Mandatory Modules System      ║
 ║     Phase 3: Hybrid Search (pgvector + tsvector + pg_trgm)     ║
 ║     Phase 6: SQL-Native Matching + Domain Inference            ║
 ║     Phase 6.1: Unified Backfill Engine (Strategy Pattern)      ║
@@ -22,6 +22,39 @@
 ║     SECRET DOMAINS: admin | general                           ║
 ╚═══════════════════════════════════════════════════════════════╝
 ```
+
+---
+
+## v6.2 Changelog (2026-03-03)
+
+### Phase 6.2: Mandatory Modules System (28 → 29 Tools)
+
+Added the compliance enforcement layer for AI agents. Agents can now discover mandatory modules and check compliance before/after tasks.
+
+### New MCP Tools (+1, total 29)
+- **devvault_mandatory (Tool 29):** Returns mandatory modules filtered by `layer`, `scope`, `scope_value`, and `enforcement`. Supports `check_compliance` mode: given `modules_used[]`, returns a compliance report with `_verdict` (BLOCKED/WARNING/COMPLIANT), `missing_hard` and `missing_soft` arrays, and dependency-enriched module data. Integrated into `task-start` (`_mandatory_hint`) and `task-end` (`_compliance_hint`).
+
+### New Tables (+1)
+- **vault_mandatory_rules:** Stores mandatory module rules with `enforcement` (hard/soft), `scope` (global/domain/project_type), `layer` (numeric grouping), `is_conditional` flag, and `condition_description`. RLS: admin manage, authenticated read, service role full access.
+
+### New SQL Functions (+1)
+- **`get_mandatory_modules(p_layer, p_scope, p_scope_value)`:** Returns mandatory rules joined with module data (title, slug, domain, tags). Includes `layers_summary` with per-layer counts of hard/soft rules.
+
+### Enhancements
+- **devvault_bootstrap:** Updated AGENT_GUIDE to 29 tools. Added `compliance` tool category with `devvault_mandatory`. Added workflow steps 1.5 (load mandatory modules) and 10 (compliance check). Added behavioral rules and anti-patterns for mandatory compliance.
+- **devvault_task_start:** Returns `_mandatory_hint` directing agents to call `devvault_mandatory` for compliance requirements.
+- **devvault_task_end:** Returns `_compliance_hint` directing agents to verify mandatory module usage via `devvault_mandatory` with `check_compliance`.
+- **usage-tracker:** Added event type `mandatory` (total: 30 event types covering all 29 tools).
+
+### Initial Data (Layer 1 — Edge Function Infrastructure)
+- 7 modules seeded as `hard-enforcement`, `global` scope: `centralized-logger-edge-functions`, `logger-context-factory`, `cors-v2-dynamic-origin-validation`, `input-sanitizer-edge-functions`, `rate-limit-guard`, `migration-rate-limit-attempts-table`, `edge-function-pipeline`.
+
+### Architectural Impact
+- Agents are now **guided** to use validated infrastructure modules before implementing custom solutions
+- Hard enforcement enables BLOCKED verdict — agents cannot skip critical modules
+- Soft enforcement enables WARNING verdict — agents are informed but not blocked
+- Layer system allows progressive mandatory module rollout (Layer 1 → Layer 2 → ...)
+- Zero coupling with existing tools — mandatory is a standalone compliance layer
 
 ---
 
@@ -44,7 +77,7 @@ Extended the MCP server with 3 new tools and 4 enhancements to prepare for mass 
 - **devvault_update:** Added `append_tags`, `append_solves_problems`, and `append_common_errors` parameters for atomic array/JSONB append operations. Eliminates read-modify-write race conditions.
 - **devvault_get:** Now returns `_usage_stats` metadata (times_fetched, times_used_in_tasks, success_reports) from `vault_usage_events` and `vault_agent_tasks`.
 - **devvault_delete:** Now calls `trackUsage` for audit trail completeness.
-- **usage-tracker.ts:** Expanded `UsageEventType` union to 29 types covering all 28 tools.
+- **usage-tracker.ts:** Expanded `UsageEventType` union to 29 types covering all 28 tools (now 30 types / 29 tools with v6.2).
 
 ### Architectural Impact
 - Mass ingestion ready: agents can ingest 20 modules per call instead of 1
@@ -238,7 +271,7 @@ To limit the "blast radius" in case of a key leak, the system uses two service k
 | `vault-crud` | Internal (JWT) | general | **Main BFF for the Vault.** Performs all CRUD operations on the user's knowledge modules. **Actions:** `list`, `get`, `create`, `update`, `delete`, `search`, `get_playbook`, `share`, `unshare`, `list_shares`, `add_dependency`, `remove_dependency`, `list_dependencies`. |
 | `vault-query` | External (API Key) | general | **Public READ endpoint for Agents.** Allows external systems to query the knowledge graph. **Actions:** `bootstrap`, `search`, `get`, `list`, `list_domains`. |
 | `vault-ingest` | External (API Key) | general | **Public WRITE endpoint for Agents.** Allows external systems to create, update, and delete modules. **Actions:** `ingest` (single/batch creation), `update`, `delete`. |
-| `devvault-mcp` | External (API Key) | general | **MCP Server (Model Context Protocol) for AI Agents (v6.1).** Exposes a structured API with tools to interact with the Vault. **Tools (28):** `devvault_bootstrap`, `devvault_search`, `devvault_get`, `devvault_list`, `devvault_domains`, `devvault_ingest`, `devvault_update`, `devvault_get_group`, `devvault_validate`, `devvault_delete`, `devvault_diagnose`, `devvault_report_bug`, `devvault_resolve_bug`, `devvault_report_success`, `devvault_export_tree`, `devvault_check_updates`, `devvault_load_context`, `devvault_quickstart`, `devvault_changelog`, `devvault_diary_bug`, `devvault_diary_resolve`, `devvault_diary_list`, `devvault_get_playbook`, `devvault_task_start`, `devvault_task_end`, `devvault_batch_ingest`, `devvault_similar`, `devvault_stats`. **v6.1:** Added batch ingestion (up to 20 modules/call), vector similarity search, vault health metrics, duplicate detection on ingest (>0.92 cosine), atomic array append operations on update, and usage stats on get. **v6.0:** SQL-native diagnose architecture — `match_common_errors`, `match_solves_problems`, `infer_domain_from_text` RPCs replace JS matching. Domain-aware `vault_module_completeness` with explicit v_total. |
+| `devvault-mcp` | External (API Key) | general | **MCP Server (Model Context Protocol) for AI Agents (v6.2).** Exposes a structured API with tools to interact with the Vault. **Tools (29):** `devvault_bootstrap`, `devvault_search`, `devvault_get`, `devvault_list`, `devvault_domains`, `devvault_ingest`, `devvault_update`, `devvault_get_group`, `devvault_validate`, `devvault_delete`, `devvault_diagnose`, `devvault_report_bug`, `devvault_resolve_bug`, `devvault_report_success`, `devvault_export_tree`, `devvault_check_updates`, `devvault_load_context`, `devvault_quickstart`, `devvault_changelog`, `devvault_diary_bug`, `devvault_diary_resolve`, `devvault_diary_list`, `devvault_get_playbook`, `devvault_task_start`, `devvault_task_end`, `devvault_batch_ingest`, `devvault_similar`, `devvault_stats`. **v6.1:** Added batch ingestion (up to 20 modules/call), vector similarity search, vault health metrics, duplicate detection on ingest (>0.92 cosine), atomic array append operations on update, and usage stats on get. **v6.0:** SQL-native diagnose architecture — `match_common_errors`, `match_solves_problems`, `infer_domain_from_text` RPCs replace JS matching. Domain-aware `vault_module_completeness` with explicit v_total. |
 
 ### Entity Management
 
