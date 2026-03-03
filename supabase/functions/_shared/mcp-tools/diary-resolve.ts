@@ -9,6 +9,7 @@ import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { createLogger } from "../logger.ts";
 import type { AuthContext, McpServerLike, ToolRegistrar } from "./types.ts";
 import { trackUsage } from "./usage-tracker.ts";
+import { errorResponse, classifyRpcError } from "./error-helpers.ts";
 
 const logger = createLogger("mcp-diary-resolve");
 
@@ -68,14 +69,7 @@ export const registerDiaryResolveTool: ToolRegistrar = (
             bug_id: bugId,
             error: error.message,
           });
-          return {
-            content: [
-              {
-                type: "text",
-                text: `❌ Failed to resolve bug: ${error.message}`,
-              },
-            ],
-          };
+          return errorResponse({ code: classifyRpcError(error.message), message: error.message });
         }
 
         trackUsage(client, auth, {
@@ -105,13 +99,9 @@ export const registerDiaryResolveTool: ToolRegistrar = (
         };
       } catch (err) {
         logger.error("Unexpected error in diary-resolve", {
-          error: err.message,
+          error: (err as Error).message,
         });
-        return {
-          content: [
-            { type: "text", text: `❌ Unexpected error: ${err.message}` },
-          ],
-        };
+        return errorResponse({ code: "INTERNAL_ERROR", message: (err as Error).message });
       }
     },
   });
