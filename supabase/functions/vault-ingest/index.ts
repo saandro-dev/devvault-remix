@@ -20,8 +20,15 @@ import { getSupabaseClient } from "../_shared/supabase-client.ts";
 import { createSuccessResponse, createErrorResponse, ERROR_CODES } from "../_shared/api-helpers.ts";
 import { validateApiKey } from "../_shared/api-key-guard.ts";
 import { createLogger } from "../_shared/logger.ts";
+import { sanitizeFields } from "../_shared/input-sanitizer.ts";
 
 const logger = createLogger("vault-ingest");
+
+const INGEST_TEXT_FIELDS = [
+  "title", "description", "code", "context_markdown", "why_it_matters",
+  "code_example", "usage_hint", "phase_title", "source_project",
+  "database_schema", "test_code", "module_group",
+];
 
 Deno.serve(withSentry("vault-ingest", async (req: Request) => {
   // 1. CORS
@@ -117,7 +124,8 @@ Deno.serve(withSentry("vault-ingest", async (req: Request) => {
       }
 
       const toInsert = rawModules.map((mod: unknown) => {
-        const m = mod as Record<string, unknown>;
+        const raw = mod as Record<string, unknown>;
+        const m = sanitizeFields(raw, INGEST_TEXT_FIELDS);
         if (!m.title) throw new Error("Module missing required field: title");
         return {
           user_id:              userId,
@@ -204,9 +212,10 @@ Deno.serve(withSentry("vault-ingest", async (req: Request) => {
       ];
 
       const updates: Record<string, unknown> = {};
+      const sanitizedBody = sanitizeFields(body as Record<string, unknown>, INGEST_TEXT_FIELDS);
       for (const field of allowedFields) {
-        if (field in body) {
-          updates[field] = body[field];
+        if (field in sanitizedBody) {
+          updates[field] = sanitizedBody[field];
         }
       }
 

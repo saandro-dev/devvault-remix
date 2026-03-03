@@ -13,6 +13,8 @@
 import { handleCorsV2, createSuccessResponse, createErrorResponse, ERROR_CODES } from "../_shared/api-helpers.ts";
 import { withSentry } from "../_shared/sentry.ts";
 import { getSupabaseClient } from "../_shared/supabase-client.ts";
+import { authenticateRequest, isResponse } from "../_shared/auth.ts";
+import { requireRole } from "../_shared/role-validator.ts";
 import { createLogger } from "../_shared/logger.ts";
 
 const logger = createLogger("vault-backfill-playbooks");
@@ -82,6 +84,14 @@ Deno.serve(withSentry("vault-backfill-playbooks", async (req: Request) => {
   if (req.method !== "POST") {
     return createErrorResponse(req, ERROR_CODES.VALIDATION_ERROR, "Only POST is accepted.", 405);
   }
+
+  // Authentication + admin role check
+  const auth = await authenticateRequest(req);
+  if (isResponse(auth)) return auth;
+  const { user } = auth;
+  await requireRole(getSupabaseClient("general"), user.id, "admin");
+
+  logger.info("playbook backfill request", { userId: user.id });
 
   const body = await req.json();
   const ownerUserId: string | undefined = body.owner_user_id;

@@ -90,7 +90,8 @@ serve(withSentry("vault-crud", async (req: Request) => {
         return createErrorResponse(req, ERROR_CODES.VALIDATION_ERROR, `Unknown action: ${action}`, 422);
     }
   } catch (err) {
-    log.error(err.message);
-    return createErrorResponse(req, ERROR_CODES.INTERNAL_ERROR, err.message, 500);
+    const message = err instanceof Error ? err.message : "Unknown error";
+    log.error(message, { userId: user.id });
+    throw err;
   }
 }));
