@@ -8,6 +8,7 @@
 import { createLogger } from "../logger.ts";
 import { trackUsage } from "./usage-tracker.ts";
 import type { ToolRegistrar } from "./types.ts";
+import { errorResponse, classifyRpcError } from "./error-helpers.ts";
 
 const logger = createLogger("mcp-tool:task-end");
 
@@ -53,12 +54,10 @@ export const registerTaskEndTool: ToolRegistrar = (server, client, auth) => {
 
         // Validate status
         if (!["success", "failure", "abandoned"].includes(status)) {
-          return {
-            content: [{
-              type: "text",
-              text: `❌ Invalid status: ${status}. Must be 'success', 'failure', or 'abandoned'.`,
-            }],
-          };
+          return errorResponse({
+            code: "INVALID_INPUT",
+            message: `Invalid status: '${status}'. Must be 'success', 'failure', or 'abandoned'.`,
+          });
         }
 
         // Fetch the task to compute duration
@@ -70,34 +69,28 @@ export const registerTaskEndTool: ToolRegistrar = (server, client, auth) => {
 
         if (fetchError || !existingTask) {
           logger.error("Task not found", { task_id: taskId, error: fetchError?.message });
-          return {
-            content: [{
-              type: "text",
-              text: `❌ Task not found: ${taskId}. Make sure the task_id is correct.`,
-            }],
-          };
+          return errorResponse({
+            code: "TASK_NOT_FOUND",
+            message: `Task not found: ${taskId}. Make sure the task_id is correct.`,
+          });
         }
 
         const task = existingTask as Record<string, unknown>;
 
         // Verify ownership
         if (task.user_id !== auth.userId) {
-          return {
-            content: [{
-              type: "text",
-              text: "❌ You can only end your own tasks.",
-            }],
-          };
+          return errorResponse({
+            code: "PERMISSION_DENIED",
+            message: "You can only end your own tasks.",
+          });
         }
 
         // Verify task is still active
         if (task.status !== "active") {
-          return {
-            content: [{
-              type: "text",
-              text: `❌ Task is already closed with status: ${task.status}. Cannot update.`,
-            }],
-          };
+          return errorResponse({
+            code: "INVALID_INPUT",
+            message: `Task is already closed with status: '${task.status}'. Cannot update.`,
+          });
         }
 
         // Compute duration
@@ -121,12 +114,7 @@ export const registerTaskEndTool: ToolRegistrar = (server, client, auth) => {
 
         if (updateError) {
           logger.error("Failed to end task", { error: updateError.message });
-          return {
-            content: [{
-              type: "text",
-              text: `❌ Failed to end task: ${updateError.message}`,
-            }],
-          };
+          return errorResponse({ code: classifyRpcError(updateError.message), message: updateError.message });
         }
 
         trackUsage(client, auth, {
@@ -167,12 +155,7 @@ export const registerTaskEndTool: ToolRegistrar = (server, client, auth) => {
         };
       } catch (err) {
         logger.error("Unexpected error in task-end", { error: (err as Error).message });
-        return {
-          content: [{
-            type: "text",
-            text: `❌ Unexpected error: ${(err as Error).message}`,
-          }],
-        };
+        return errorResponse({ code: "INTERNAL_ERROR", message: (err as Error).message });
       }
     },
   });

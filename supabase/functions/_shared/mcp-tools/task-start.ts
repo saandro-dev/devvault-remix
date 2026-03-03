@@ -8,6 +8,7 @@
 import { createLogger } from "../logger.ts";
 import { trackUsage } from "./usage-tracker.ts";
 import type { ToolRegistrar } from "./types.ts";
+import { errorResponse, classifyRpcError } from "./error-helpers.ts";
 
 const logger = createLogger("mcp-tool:task-start");
 
@@ -53,12 +54,7 @@ export const registerTaskStartTool: ToolRegistrar = (server, client, auth) => {
 
         if (error) {
           logger.error("Failed to create task", { error: error.message });
-          return {
-            content: [{
-              type: "text",
-              text: `❌ Failed to start task: ${error.message}`,
-            }],
-          };
+          return errorResponse({ code: classifyRpcError(error.message), message: error.message });
         }
 
         trackUsage(client, auth, {
@@ -86,12 +82,7 @@ export const registerTaskStartTool: ToolRegistrar = (server, client, auth) => {
         };
       } catch (err) {
         logger.error("Unexpected error in task-start", { error: (err as Error).message });
-        return {
-          content: [{
-            type: "text",
-            text: `❌ Unexpected error: ${(err as Error).message}`,
-          }],
-        };
+        return errorResponse({ code: "INTERNAL_ERROR", message: (err as Error).message });
       }
     },
   });
