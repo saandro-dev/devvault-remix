@@ -1,8 +1,10 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { handleCorsV2, createSuccessResponse, createErrorResponse, ERROR_CODES } from "../_shared/api-helpers.ts";
+import { handleCorsV2, createSuccessResponse, createErrorResponse, ERROR_CODES, getClientIp } from "../_shared/api-helpers.ts";
 import { authenticateRequest, isResponse } from "../_shared/auth.ts";
 import { withSentry } from "../_shared/sentry.ts";
 import { createLogger } from "../_shared/logger.ts";
+import { checkRateLimit } from "../_shared/rate-limit-guard.ts";
+import { sanitizeFields, sanitizeStringArray } from "../_shared/input-sanitizer.ts";
 const log = createLogger("vault-crud");
 import {
   enrichModuleDependencies,
@@ -10,6 +12,12 @@ import {
   handleRemoveDependency,
   handleListDependencies,
 } from "../_shared/dependency-helpers.ts";
+
+const TEXT_FIELDS = [
+  "title", "description", "why_it_matters", "usage_hint",
+  "code_example", "source_project", "phase_title", "context_markdown",
+  "database_schema", "module_group",
+];
 
 serve(withSentry("vault-crud", async (req: Request) => {
   const corsResponse = handleCorsV2(req);
@@ -23,8 +31,15 @@ serve(withSentry("vault-crud", async (req: Request) => {
   if (isResponse(auth)) return auth;
   const { user, client } = auth;
 
+  const rateCheck = await checkRateLimit(getClientIp(req), "vault-crud");
+  if (rateCheck.blocked) {
+    return createErrorResponse(req, ERROR_CODES.RATE_LIMITED, `Rate limited. Retry after ${rateCheck.retryAfterSeconds}s`, 429);
+  }
+
   try {
-    const body = await req.json();
+    const rawBody = await req.json();
+    const body = sanitizeFields(rawBody, TEXT_FIELDS);
+    if (body.tags) body.tags = sanitizeStringArray(body.tags);
     const { action } = body;
     log.info(`action=${action} user=${user.id}`);
 

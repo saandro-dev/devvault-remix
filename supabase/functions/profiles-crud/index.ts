@@ -1,7 +1,12 @@
 import { authenticateRequest, isResponse } from "../_shared/auth.ts";
-import { handleCorsV2, createErrorResponse, createSuccessResponse, ERROR_CODES } from "../_shared/api-helpers.ts";
+import { handleCorsV2, createErrorResponse, createSuccessResponse, ERROR_CODES, getClientIp } from "../_shared/api-helpers.ts";
+import { withSentry } from "../_shared/sentry.ts";
+import { checkRateLimit } from "../_shared/rate-limit-guard.ts";
+import { sanitizeFields } from "../_shared/input-sanitizer.ts";
 
-Deno.serve(async (req) => {
+const TEXT_FIELDS = ["display_name", "bio"];
+
+Deno.serve(withSentry("profiles-crud", async (req: Request) => {
   const corsResponse = handleCorsV2(req);
   if (corsResponse) return corsResponse;
 
@@ -10,8 +15,14 @@ Deno.serve(async (req) => {
 
   const { user, client } = authResult;
 
+  const rateCheck = await checkRateLimit(getClientIp(req), "profiles-crud");
+  if (rateCheck.blocked) {
+    return createErrorResponse(req, ERROR_CODES.RATE_LIMITED, `Rate limited. Retry after ${rateCheck.retryAfterSeconds}s`, 429);
+  }
+
   try {
-    const { action, payload } = await req.json();
+    const rawBody = await req.json();
+    const { action, payload: rawPayload } = rawBody;
 
     switch (action) {
       case "get": {
@@ -26,7 +37,8 @@ Deno.serve(async (req) => {
       }
 
       case "update": {
-        const { display_name, bio, avatar_url } = payload ?? {};
+        const payload = sanitizeFields(rawPayload ?? {}, TEXT_FIELDS);
+        const { display_name, bio, avatar_url } = payload;
 
         if (!display_name || typeof display_name !== "string" || display_name.trim().length === 0) {
           return createErrorResponse(req, ERROR_CODES.VALIDATION_ERROR, "display_name is required", 400);
@@ -51,7 +63,6 @@ Deno.serve(async (req) => {
         return createErrorResponse(req, ERROR_CODES.VALIDATION_ERROR, `Unknown action: ${action}`, 400);
     }
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    return createErrorResponse(req, ERROR_CODES.INTERNAL_ERROR, message, 500);
+    throw err;
   }
-});
+}));

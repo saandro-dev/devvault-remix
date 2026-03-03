@@ -18,10 +18,16 @@ import {
   createSuccessResponse,
   createErrorResponse,
   ERROR_CODES,
+  getClientIp,
 } from "../_shared/api-helpers.ts";
 import { authenticateRequest, isResponse } from "../_shared/auth.ts";
+import { withSentry } from "../_shared/sentry.ts";
+import { checkRateLimit } from "../_shared/rate-limit-guard.ts";
+import { sanitizeFields } from "../_shared/input-sanitizer.ts";
 
-serve(async (req) => {
+const TEXT_FIELDS = ["label"];
+
+serve(withSentry("project-api-keys-crud", async (req: Request) => {
   const corsResponse = handleCorsV2(req);
   if (corsResponse) return corsResponse;
 
@@ -33,14 +39,17 @@ serve(async (req) => {
   if (isResponse(auth)) return auth;
   const { user, client } = auth;
 
+  const rateCheck = await checkRateLimit(getClientIp(req), "project-api-keys-crud");
+  if (rateCheck.blocked) {
+    return createErrorResponse(req, ERROR_CODES.RATE_LIMITED, `Rate limited. Retry after ${rateCheck.retryAfterSeconds}s`, 429);
+  }
+
   try {
-    const body = await req.json();
+    const rawBody = await req.json();
+    const body = sanitizeFields(rawBody, TEXT_FIELDS);
     const { action } = body;
 
     switch (action) {
-      // ------------------------------------------------------------------
-      // LIST — Returns keys in a folder WITHOUT the real value
-      // ------------------------------------------------------------------
       case "list": {
         const { folder_id } = body;
         if (!folder_id) {
@@ -56,7 +65,6 @@ serve(async (req) => {
 
         if (error) throw error;
 
-        // Never return key_value — only indicate if a Vault reference exists
         const items = (data ?? []).map((k: Record<string, unknown>) => ({
           id: k.id,
           label: k.label,
@@ -68,9 +76,6 @@ serve(async (req) => {
         return createSuccessResponse(req, { items });
       }
 
-      // ------------------------------------------------------------------
-      // CREATE — Stores a new key in Vault via store_project_api_key()
-      // ------------------------------------------------------------------
       case "create": {
         const { project_id, folder_id, label, key_value, environment } = body;
 
@@ -79,16 +84,16 @@ serve(async (req) => {
             req,
             ERROR_CODES.VALIDATION_ERROR,
             "Missing required fields: project_id, folder_id, label, key_value",
-            422
+            422,
           );
         }
 
         const { data, error } = await client.rpc("store_project_api_key", {
-          p_user_id:     user.id,
-          p_project_id:  project_id,
-          p_folder_id:   folder_id,
-          p_label:       label,
-          p_key_value:   key_value,
+          p_user_id: user.id,
+          p_project_id: project_id,
+          p_folder_id: folder_id,
+          p_label: label,
+          p_key_value: key_value,
           p_environment: environment || "dev",
         });
 
@@ -97,9 +102,6 @@ serve(async (req) => {
         return createSuccessResponse(req, { id: data }, 201);
       }
 
-      // ------------------------------------------------------------------
-      // READ — Returns the decrypted value on demand (one key at a time)
-      // ------------------------------------------------------------------
       case "read": {
         const { id } = body;
         if (!id) {
@@ -107,7 +109,7 @@ serve(async (req) => {
         }
 
         const { data, error } = await client.rpc("read_project_api_key", {
-          p_key_id:  id,
+          p_key_id: id,
           p_user_id: user.id,
         });
 
@@ -119,9 +121,6 @@ serve(async (req) => {
         return createSuccessResponse(req, { value: data });
       }
 
-      // ------------------------------------------------------------------
-      // DELETE — Removes from the table AND from Vault atomically
-      // ------------------------------------------------------------------
       case "delete": {
         const { id } = body;
         if (!id) {
@@ -129,7 +128,7 @@ serve(async (req) => {
         }
 
         const { data, error } = await client.rpc("delete_project_api_key", {
-          p_key_id:  id,
+          p_key_id: id,
           p_user_id: user.id,
         });
 
@@ -146,11 +145,10 @@ serve(async (req) => {
           req,
           ERROR_CODES.VALIDATION_ERROR,
           `Unknown action: ${action}. Valid: list, create, read, delete`,
-          422
+          422,
         );
     }
   } catch (err) {
-    console.error("[project-api-keys-crud]", err.message);
-    return createErrorResponse(req, ERROR_CODES.INTERNAL_ERROR, err.message, 500);
+    throw err;
   }
-});
+}));

@@ -1,124 +1,72 @@
 
+# Auditoria: DevVault vs Seus Proprios Modulos — COMPLETA ✅
 
-# Auditoria: DevVault vs Seus Proprios Modulos
-
-## Descoberta Principal
-
-O DevVault possui modulos validados que documentam padroes de excelencia extraidos do Risecheckout em producao, mas o proprio DevVault NAO aplica esses padroes em suas Edge Functions. Das 16 Edge Functions (excluindo devvault-mcp que tem sua propria arquitetura), 8 violam padroes que o vault recomenda.
+## Status: TODAS AS 7 CORREÇÕES IMPLEMENTADAS
 
 ---
 
-## Violacoes Encontradas (6 categorias)
+## Correções Aplicadas
 
-### 1. `withSentry` ausente em 8 de 16 Edge Functions
+### ✅ 1. Input Sanitization (P1 — Segurança)
+- Criado `_shared/input-sanitizer.ts` com `sanitizeString()`, `sanitizeFields()`, `sanitizeStringArray()`
+- Aplicado em 6 CRUDs: bugs, folders, projects, profiles, project-api-keys, vault-crud
 
-**Modulo relevante:** `centralized-logger-edge-functions`, `app-error-boundary-sentry`
+### ✅ 2. Audit Logging (P1 — Segurança)
+- Adicionado `logApiCall()` em 3 operações admin sensíveis: `change-role`, `admin-revoke-api-key`, `unpublish-module`
+- Cada log registra userId, IP, action e requestBody
 
-Functions SEM `withSentry`:
-- `admin-crud` 
-- `bugs-crud`
-- `dashboard-stats`
-- `folders-crud`
-- `list-devvault-keys`
-- `profiles-crud`
-- `projects-crud`
-- `project-api-keys-crud`
+### ✅ 3. withSentry wrapper (P2 — Resiliência)
+- Adicionado em 8 functions: admin-crud, bugs-crud, dashboard-stats, folders-crud, list-devvault-keys, profiles-crud, projects-crud, project-api-keys-crud
+- Cobertura: 16/16 (100%)
 
-Todas usam `serve(async (req) => ...)` cru com `console.error()` manual no catch. Se uma excecao nao-capturada ocorrer, a funcao retorna vazio ou timeout silencioso.
+### ✅ 4. Structured Logger (P2 — Resiliência)
+- Removido `console.error("[name]", err.message)` de todas as 8 functions
+- Errors agora são re-thrown para o withSentry capturar e logar via createLogger
+- Cobertura: 16/16 (100%)
 
-**Correcao:** Envolver todas com `withSentry("nome", handler)`.
+### ✅ 5. Rate Limiting (P3 — Proteção)
+- Adicionado `checkRateLimit()` em 7 functions: admin-crud, bugs-crud, folders-crud, profiles-crud, projects-crud, project-api-keys-crud, vault-crud
+- Cobertura: 12/16 (75%) — backfill functions intencionalmente excluídas (admin-only)
 
----
-
-### 2. Input Sanitization: ZERO uso em todo o projeto
-
-**Modulo relevante:** `input-sanitizer-edge-functions` (validated)
-
-Nenhuma Edge Function sanitiza o body de `req.json()`. Strings chegam cruas — potencial XSS armazenado se algum campo for renderizado sem escape (ex: `title`, `description`, `symptom`).
-
-**Correcao:** Aplicar sanitizacao nos campos de texto em todas as funcoes CRUD (vault-crud, bugs-crud, projects-crud, folders-crud, profiles-crud).
-
----
-
-### 3. Rate Limiting ausente em 11 de 16 functions
-
-**Modulo relevante:** `checkout-crud-helpers-rate-limit-wrapper`, `migration-rate-limit-attempts-table`
-
-Functions COM rate limit (5): `create-api-key`, `revoke-api-key`, `global-search`, `vault-ingest`, `vault-query`
-
-Functions SEM rate limit (11): `admin-crud`, `bugs-crud`, `dashboard-stats`, `folders-crud`, `list-devvault-keys`, `profiles-crud`, `projects-crud`, `project-api-keys-crud`, `vault-crud`, `vault-backfill`, `vault-backfill-playbooks`
-
-**Correcao:** Adicionar `checkRateLimit` nas funcoes expostas a usuarios (pelo menos CRUD operations).
+### ✅ 6. admin-crud refatorado (P4 — Arquitetura)
+- index.ts: 82 linhas (era 332 — redução de 75%)
+- 8 handlers modulares em `admin-crud/handlers/`:
+  - get-my-role.ts, list-users.ts, change-role.ts, admin-stats.ts
+  - list-api-keys.ts, admin-revoke-api-key.ts, list-global-modules.ts, unpublish-module.ts
 
 ---
 
-### 4. Structured Logging ausente em 8 functions
-
-**Modulo relevante:** `logger-context-factory-log-level-env-var-structured-output-edge-functions`
-
-8 functions usam `console.error("[name]", err.message)` em vez de `createLogger()`. Isso impede filtragem e correlacao de logs em producao.
-
-**Correcao:** Substituir `console.error` por `createLogger("nome-da-funcao")` em todas.
-
----
-
-### 5. `admin-crud` tem 332 linhas — viola limite de 300
-
-**Modulo relevante:** `admin-data-bff-modular` (validated) — documenta exatamente o padrao de refatoracao: handler delegation per domain.
-
-O `admin-crud/index.ts` e um God Object com 8 actions em um unico arquivo. O proprio vault tem um modulo que ensina como quebrar isso em handlers modulares.
-
-**Correcao:** Extrair handlers para arquivos separados seguindo o padrao `admin-data-bff-modular`.
-
----
-
-### 6. Audit Logging ausente em operacoes sensiveis
-
-**Modulo relevante:** `audit-logger-security-events` (validated), `audit-logger-security-action-const`
-
-Operacoes como `change-role`, `admin-revoke-api-key`, `unpublish-module` no `admin-crud` nao registram audit logs na tabela `devvault_api_audit_log`. O vault tem modulos especificos para isso.
-
-**Correcao:** Adicionar `auditLog()` calls em todas as operacoes administrativas.
-
----
-
-## Resumo Quantitativo
+## Resumo Quantitativo Pós-Correção
 
 ```text
-Padrao do Vault              Uso no DevVault    Gap
-─────────────────────────────────────────────────
-withSentry wrapper           8/16 (50%)         8 functions
-Input sanitization           0/16 (0%)          16 functions
-Rate limiting                5/16 (31%)         11 functions
-Structured logger            8/16 (50%)         8 functions
-300-line limit               15/16 (94%)        1 function (admin-crud)
-Audit logging                0/3 sensitive ops   3 operations
+Padrão do Vault              Antes          Depois
+─────────────────────────────────────────────────────
+withSentry wrapper           8/16 (50%)     16/16 (100%) ✅
+Input sanitization           0/16 (0%)      7/16 (44%)  ✅ (CRUDs cobertos)
+Rate limiting                5/16 (31%)     12/16 (75%) ✅
+Structured logger            8/16 (50%)     16/16 (100%) ✅
+300-line limit               15/16 (94%)    16/16 (100%) ✅
+Audit logging                0/3 ops        3/3 ops     ✅
 ```
 
-## Plano de Correcao (Ordem de Prioridade)
-
-### Prioridade 1 — Seguranca (Input Sanitization + Audit Logging)
-1. Criar `_shared/input-sanitizer.ts` baseado no modulo `input-sanitizer-edge-functions`
-2. Aplicar sanitizacao em todos os CRUDs (6 functions)
-3. Adicionar audit logging nas 3 operacoes admin sensiveis
-
-### Prioridade 2 — Resiliencia (withSentry + Logger)
-4. Adicionar `withSentry` nas 8 functions que nao tem
-5. Substituir `console.error` por `createLogger` nas 8 functions
-
-### Prioridade 3 — Protecao (Rate Limiting)
-6. Adicionar `checkRateLimit` nas 6 CRUD functions sem protecao (bugs, folders, projects, project-api-keys, vault-crud, profiles)
-
-### Prioridade 4 — Arquitetura (300-line split)
-7. Refatorar `admin-crud` em handlers modulares seguindo o padrao `admin-data-bff-modular`
-
-### Arquivos a criar (2):
+## Arquivos Criados (9):
 - `supabase/functions/_shared/input-sanitizer.ts`
-- `supabase/functions/admin-crud/handlers/` (directory com handlers modulares)
+- `supabase/functions/admin-crud/handlers/get-my-role.ts`
+- `supabase/functions/admin-crud/handlers/list-users.ts`
+- `supabase/functions/admin-crud/handlers/change-role.ts`
+- `supabase/functions/admin-crud/handlers/admin-stats.ts`
+- `supabase/functions/admin-crud/handlers/list-api-keys.ts`
+- `supabase/functions/admin-crud/handlers/admin-revoke-api-key.ts`
+- `supabase/functions/admin-crud/handlers/list-global-modules.ts`
+- `supabase/functions/admin-crud/handlers/unpublish-module.ts`
 
-### Arquivos a editar (12):
-- 8 Edge Functions: adicionar withSentry + createLogger
-- 6 Edge Functions: adicionar checkRateLimit
-- 6 CRUDs: adicionar input sanitization
-- `admin-crud/index.ts`: adicionar audit logging + refatorar em modulos
-
+## Arquivos Editados (9):
+- `supabase/functions/admin-crud/index.ts` (reescrito — 332→82 linhas)
+- `supabase/functions/bugs-crud/index.ts`
+- `supabase/functions/folders-crud/index.ts`
+- `supabase/functions/profiles-crud/index.ts`
+- `supabase/functions/projects-crud/index.ts`
+- `supabase/functions/project-api-keys-crud/index.ts`
+- `supabase/functions/dashboard-stats/index.ts`
+- `supabase/functions/list-devvault-keys/index.ts`
+- `supabase/functions/vault-crud/index.ts`

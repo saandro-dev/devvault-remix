@@ -1,8 +1,9 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { handleCorsV2, createSuccessResponse, createErrorResponse, ERROR_CODES } from "../_shared/api-helpers.ts";
 import { authenticateRequest, isResponse } from "../_shared/auth.ts";
+import { withSentry } from "../_shared/sentry.ts";
 
-serve(async (req) => {
+serve(withSentry("list-devvault-keys", async (req: Request) => {
   const corsResponse = handleCorsV2(req);
   if (corsResponse) return corsResponse;
 
@@ -24,7 +25,6 @@ serve(async (req) => {
     if (error) throw error;
     return createSuccessResponse(req, { items: data });
   } catch (err) {
-    console.error("[list-devvault-keys]", err.message);
-    return createErrorResponse(req, ERROR_CODES.INTERNAL_ERROR, err.message, 500);
+    throw err;
   }
-});
+}));

@@ -1,8 +1,13 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { handleCorsV2, createSuccessResponse, createErrorResponse, ERROR_CODES } from "../_shared/api-helpers.ts";
+import { handleCorsV2, createSuccessResponse, createErrorResponse, ERROR_CODES, getClientIp } from "../_shared/api-helpers.ts";
 import { authenticateRequest, isResponse } from "../_shared/auth.ts";
+import { withSentry } from "../_shared/sentry.ts";
+import { checkRateLimit } from "../_shared/rate-limit-guard.ts";
+import { sanitizeFields } from "../_shared/input-sanitizer.ts";
 
-serve(async (req) => {
+const TEXT_FIELDS = ["name"];
+
+serve(withSentry("folders-crud", async (req: Request) => {
   const corsResponse = handleCorsV2(req);
   if (corsResponse) return corsResponse;
 
@@ -14,8 +19,14 @@ serve(async (req) => {
   if (isResponse(auth)) return auth;
   const { user, client } = auth;
 
+  const rateCheck = await checkRateLimit(getClientIp(req), "folders-crud");
+  if (rateCheck.blocked) {
+    return createErrorResponse(req, ERROR_CODES.RATE_LIMITED, `Rate limited. Retry after ${rateCheck.retryAfterSeconds}s`, 429);
+  }
+
   try {
-    const body = await req.json();
+    const rawBody = await req.json();
+    const body = sanitizeFields(rawBody, TEXT_FIELDS);
     const { action } = body;
 
     switch (action) {
@@ -80,7 +91,6 @@ serve(async (req) => {
         return createErrorResponse(req, ERROR_CODES.VALIDATION_ERROR, `Unknown action: ${action}`, 422);
     }
   } catch (err) {
-    console.error("[folders-crud]", err.message);
-    return createErrorResponse(req, ERROR_CODES.INTERNAL_ERROR, err.message, 500);
+    throw err;
   }
-});
+}));
