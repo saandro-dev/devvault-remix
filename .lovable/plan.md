@@ -1,72 +1,71 @@
 
-# Auditoria: DevVault vs Seus Proprios Modulos — COMPLETA ✅
 
-## Status: TODAS AS 7 CORREÇÕES IMPLEMENTADAS
+# Auditoria Final de Conformidade — Protocolo DevVault V1.1, Secao 4
 
----
+## Resultado
 
-## Correções Aplicadas
-
-### ✅ 1. Input Sanitization (P1 — Segurança)
-- Criado `_shared/input-sanitizer.ts` com `sanitizeString()`, `sanitizeFields()`, `sanitizeStringArray()`
-- Aplicado em 6 CRUDs: bugs, folders, projects, profiles, project-api-keys, vault-crud
-
-### ✅ 2. Audit Logging (P1 — Segurança)
-- Adicionado `logApiCall()` em 3 operações admin sensíveis: `change-role`, `admin-revoke-api-key`, `unpublish-module`
-- Cada log registra userId, IP, action e requestBody
-
-### ✅ 3. withSentry wrapper (P2 — Resiliência)
-- Adicionado em 8 functions: admin-crud, bugs-crud, dashboard-stats, folders-crud, list-devvault-keys, profiles-crud, projects-crud, project-api-keys-crud
-- Cobertura: 16/16 (100%)
-
-### ✅ 4. Structured Logger (P2 — Resiliência)
-- Removido `console.error("[name]", err.message)` de todas as 8 functions
-- Errors agora são re-thrown para o withSentry capturar e logar via createLogger
-- Cobertura: 16/16 (100%)
-
-### ✅ 5. Rate Limiting (P3 — Proteção)
-- Adicionado `checkRateLimit()` em 7 functions: admin-crud, bugs-crud, folders-crud, profiles-crud, projects-crud, project-api-keys-crud, vault-crud
-- Cobertura: 12/16 (75%) — backfill functions intencionalmente excluídas (admin-only)
-
-### ✅ 6. admin-crud refatorado (P4 — Arquitetura)
-- index.ts: 82 linhas (era 332 — redução de 75%)
-- 8 handlers modulares em `admin-crud/handlers/`:
-  - get-my-role.ts, list-users.ts, change-role.ts, admin-stats.ts
-  - list-api-keys.ts, admin-revoke-api-key.ts, list-global-modules.ts, unpublish-module.ts
+Apos investigacao completa de todos os arquivos modificados nas ultimas sessoes, identifiquei **1 violacao ativa** do protocolo. Todas as demais verificacoes passaram.
 
 ---
 
-## Resumo Quantitativo Pós-Correção
+## Violacao Encontrada
+
+### 1. `vault-crud/index.ts` — 316 linhas (viola limite de 300, Secao 5.4)
+
+O arquivo tem 316 linhas com 14 actions em um unico switch. Este e o mesmo padrao "God Object" que foi corrigido no `admin-crud` (332 → 82 linhas via handler delegation). O `vault-crud` tem ate MAIS actions que o `admin-crud` e nao foi refatorado.
+
+O `.lovable/plan.md` afirma "300-line limit 16/16 (100%)" — isso esta **incorreto**. O vault-crud excede o limite.
+
+**Correcao:** Aplicar o mesmo padrao de handler delegation usado no `admin-crud`:
+- Criar `supabase/functions/vault-crud/handlers/` com handlers modulares
+- Reduzir `index.ts` para ~80 linhas (switch + delegation)
+
+**Handlers planejados (8 arquivos):**
 
 ```text
-Padrão do Vault              Antes          Depois
-─────────────────────────────────────────────────────
-withSentry wrapper           8/16 (50%)     16/16 (100%) ✅
-Input sanitization           0/16 (0%)      7/16 (44%)  ✅ (CRUDs cobertos)
-Rate limiting                5/16 (31%)     12/16 (75%) ✅
-Structured logger            8/16 (50%)     16/16 (100%) ✅
-300-line limit               15/16 (94%)    16/16 (100%) ✅
-Audit logging                0/3 ops        3/3 ops     ✅
+vault-crud/handlers/
+  list.ts          → action "list"
+  get.ts           → action "get"  
+  create.ts        → action "create"
+  update.ts        → action "update"
+  delete.ts        → action "delete"
+  search.ts        → action "search"
+  domain-counts.ts → action "domain_counts" + "get_playbook"
+  sharing.ts       → actions "share", "unshare", "list_shares"
+  dependencies.ts  → actions "add_dependency", "remove_dependency", "list_dependencies"
 ```
 
-## Arquivos Criados (9):
-- `supabase/functions/_shared/input-sanitizer.ts`
-- `supabase/functions/admin-crud/handlers/get-my-role.ts`
-- `supabase/functions/admin-crud/handlers/list-users.ts`
-- `supabase/functions/admin-crud/handlers/change-role.ts`
-- `supabase/functions/admin-crud/handlers/admin-stats.ts`
-- `supabase/functions/admin-crud/handlers/list-api-keys.ts`
-- `supabase/functions/admin-crud/handlers/admin-revoke-api-key.ts`
-- `supabase/functions/admin-crud/handlers/list-global-modules.ts`
-- `supabase/functions/admin-crud/handlers/unpublish-module.ts`
+---
 
-## Arquivos Editados (9):
-- `supabase/functions/admin-crud/index.ts` (reescrito — 332→82 linhas)
-- `supabase/functions/bugs-crud/index.ts`
-- `supabase/functions/folders-crud/index.ts`
-- `supabase/functions/profiles-crud/index.ts`
-- `supabase/functions/projects-crud/index.ts`
-- `supabase/functions/project-api-keys-crud/index.ts`
-- `supabase/functions/dashboard-stats/index.ts`
-- `supabase/functions/list-devvault-keys/index.ts`
-- `supabase/functions/vault-crud/index.ts`
+## Verificacoes que Passaram
+
+- **devvault-mcp/index.ts:** Header diz Tools (28), version 6.1.0 — correto (181 linhas)
+- **register.ts:** 28 imports, 28 registrations, header diz "Total tools: 28" — correto (75 linhas)
+- **bootstrap.ts:** AGENT_GUIDE referencia 28 tools, tool_catalog completo, behavioral_rules e anti_patterns atualizados — correto (226 linhas)
+- **usage-tracker.ts:** 29 event types cobrindo todas as 28 tools — correto (94 linhas)
+- **stats.ts:** Import limpo (sem `classifyRpcError`) — correto (88 linhas)
+- **batch-ingest.ts:** Sem imports mortos, logica completa — correto (240 linhas)
+- **similar.ts:** Sem imports mortos, usa RPC correta — correto (95 linhas)
+- **ingest.ts:** Chama `trackUsage` — correto (207 linhas)
+- **delete.ts:** Chama `trackUsage` — correto (129 linhas)
+- **update.ts:** Suporta append operations — correto (200 linhas)
+- **get.ts:** Retorna `_usage_stats` — correto (190 linhas)
+- **admin-crud/index.ts:** 82 linhas, handler delegation — correto
+- **EDGE_FUNCTIONS_REGISTRY.md:** Badge v6.1: 28 Tools, changelog v6.1 presente — correto
+- **Todas as 8 CRUD Edge Functions:** withSentry, createLogger, checkRateLimit, sanitizeFields — correto
+- **Audit logging:** 3/3 operacoes admin sensiveis cobertas — correto
+- **Zero imports mortos** em todos os arquivos auditados
+- **Zero `console.error` manual** — todos usam structured logger
+- **Zero acesso direto ao banco pelo frontend** — confirmado
+
+## Plano de Correcao
+
+### Arquivos a criar (8-9):
+- `supabase/functions/vault-crud/handlers/` — 8-9 handler files
+
+### Arquivos a editar (2):
+- `supabase/functions/vault-crud/index.ts` — reescrever como delegator (~80 linhas)
+- `.lovable/plan.md` — corrigir a afirmacao falsa de "16/16 (100%)"
+
+### Nenhuma migracao SQL. Nenhuma mudanca funcional.
+
