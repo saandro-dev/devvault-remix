@@ -6,6 +6,7 @@
  */
 
 import { createLogger } from "../logger.ts";
+import { trackUsage } from "./usage-tracker.ts";
 import { errorResponse, classifyRpcError } from "./error-helpers.ts";
 import type { ToolRegistrar } from "./types.ts";
 
@@ -76,6 +77,7 @@ export const registerDeleteTool: ToolRegistrar = (server, client, auth) => {
             return errorResponse({ code: classifyRpcError(error.message), message: error.message });
           }
 
+          trackUsage(client, auth, { event_type: "delete", tool_name: "devvault_delete", module_id: moduleId });
           logger.info("module hard deleted", { moduleId, title: ownerCheck.title });
           return {
             content: [{
@@ -103,6 +105,7 @@ export const registerDeleteTool: ToolRegistrar = (server, client, auth) => {
           return errorResponse({ code: classifyRpcError(error.message), message: error.message });
         }
 
+        trackUsage(client, auth, { event_type: "delete", tool_name: "devvault_delete", module_id: moduleId });
         logger.info("module soft deleted (deprecated)", { moduleId, title: data.title });
         return {
           content: [{
