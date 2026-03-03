@@ -1,99 +1,124 @@
 
 
-# Plano: Otimizar DevVault para Experiência Zero-Fricção de Agentes IA
+# Auditoria Completa: Implementação das 5 Ações de Otimização para Agentes
 
-## Diagnóstico das Dificuldades Reais
+## Resultado da Auditoria
 
-Após investigação profunda do codebase, identifiquei **5 pontos de fricção** que agentes enfrentam:
+### Acao 1: error-helpers.ts -- PARCIALMENTE IMPLEMENTADA
 
-### 1. Protocol Version Mismatch (Intermitente)
-O `mcp-lite@0.10.0` é a versão mais recente disponível no npm. Agentes com clientes MCP mais novos (protocolo `2025-11-25`) podem receber `400 Bad Request` no GET/SSE, enquanto POST funciona via fallback. Não há upgrade possível da lib — precisa de handler customizado.
+**O que foi feito corretamente:**
+- `error-helpers.ts` criado com `errorResponse()`, `classifyRpcError()`, e `ErrorCode` union type
+- Aplicado em `get.ts` (3 pontos de erro) e `ingest.ts` (1 ponto de erro)
+- Código limpo, tipado, sem dead code
 
-### 2. Mensagens de Erro Opacas
-Quando uma tool falha (ex: RPC error, module not found), o agente recebe `Error: <mensagem crua>` sem contexto de recuperação. O agente não sabe **o que fazer em seguida**.
+**O que ficou INCOMPLETO (violação da Seção 4.4 -- Divida Tecnica Zero):**
+- **14 arquivos de tools** ainda usam `Error: ${error.message}` raw sem `errorResponse()`
+- **10 arquivos** usam `Uncaught error: ${String(err)}` raw sem `errorResponse()`
+- Arquivos afetados: `update.ts`, `delete.ts`, `list.ts`, `domains.ts`, `changelog.ts`, `get-group.ts`, `quickstart.ts`, `export-tree.ts`, `load-context.ts`, `report-bug.ts`, `resolve-bug.ts`, `report-success.ts`, `check-updates.ts`, `get-playbook.ts`, `diagnose-troubleshoot.ts`, `bootstrap.ts`, `search.ts`
+- Isso cria uma **inconsistencia arquitetural**: 2 tools retornam erros acionaveis, 23 retornam strings brutas. O agente nao pode confiar num padrao unico de erro.
 
-### 3. `devvault_ingest` Aceita Módulos Incompletos Silenciosamente
-O agente ingere um módulo com apenas `title` e `code`, recebe `success: true`, e o módulo fica com score 30/100. Não há **bloqueio proativo** nem **missing_fields na resposta de ingestão** antes de salvar.
+**Veredicto:** Viola Seção 4.1 (Zero Remendos -- correcao parcial e um remendo) e 4.4 (Divida Tecnica Zero).
 
-### 4. `devvault_search` Não Orienta o Agente em Busca Vazia
-Quando a busca retorna 0 resultados, o agente recebe apenas `total_results: 0` sem sugestões de termos alternativos, domínios disponíveis, ou próximos passos.
+### Acao 2: Validacao Proativa no ingest -- IMPLEMENTADA CORRETAMENTE
 
-### 5. Bootstrap Retorna Dados Demais sem Priorização
-O `_agent_guide` tem 25 tools listadas de uma vez. Agentes com contexto limitado podem não absorver tudo. Falta um **quick_reference** condensado.
+- `_quality_warning` ("critical" / "low") presente
+- `_missing_for_100` retorna campos faltantes
+- `_hint` dinamico baseado no score
+- Warnings proativos para `why_it_matters`, `code_example`, `usage_hint`
+- Nao bloqueia a ingestao (flexibilidade mantida)
 
----
+**Veredicto:** Sucesso total. Zero dead code.
 
-## Plano de Correções (5 ações)
+### Acao 3: Fallback Inteligente no search -- IMPLEMENTADA CORRETAMENTE
 
-### Ação 1: Respostas de Erro Acionáveis em Todas as Tools
-**Arquivo:** `supabase/functions/_shared/mcp-tools/` (todos os handlers)
+- `buildEmptySearchResponse()` retorna `_suggestions` com `available_domains`, `try_diagnose`, `try_without_filters`, e `alternative_actions`
+- Deteccao de error-like queries via regex
+- Chamada em ambos os paths (hybrid e list mode)
 
-Criar um helper `errorResponse()` que retorne não apenas a mensagem de erro, mas também:
-- `_recovery_hint`: o que o agente deve fazer (ex: "Module not found. Try devvault_search to find by keyword.")
-- `_error_code`: código padronizado (ex: `MODULE_NOT_FOUND`, `INVALID_SLUG`, `RPC_FAILURE`)
+**Veredicto:** Sucesso total. Zero dead code.
 
-Criar arquivo `supabase/functions/_shared/mcp-tools/error-helpers.ts` com factory de respostas de erro padronizadas.
+### Acao 4: Quick Reference no Bootstrap -- IMPLEMENTADA CORRETAMENTE
 
-### Ação 2: Validação Proativa no `devvault_ingest`
-**Arquivo:** `supabase/functions/_shared/mcp-tools/ingest.ts`
+- `_quick_reference` posicionado ANTES de `_agent_guide` na resposta
+- 5 tools mais usadas com one-liners
+- `_purpose` explica a funcao
 
-Antes de inserir no banco, calcular `missing_fields` e retornar na resposta:
-- Se score < 50: retornar `_quality_warning: "critical"` com lista de campos faltantes
-- Se score < 80: retornar `_quality_warning: "low"` 
-- Adicionar campo `_missing_for_100` na resposta SEMPRE
+**Veredicto:** Sucesso total.
 
-Isso não bloqueia a ingestão (agentes precisam de flexibilidade), mas torna impossível ignorar a incompletude.
+### Acao 5: Protocol Version Middleware -- IMPLEMENTADA CORRETAMENTE
 
-### Ação 3: Fallback Inteligente no `devvault_search` para Busca Vazia
-**Arquivo:** `supabase/functions/_shared/mcp-tools/search.ts`
+- Intercepta `400 Bad Request` quando `mcp-protocol-version` nao e suportada
+- Retorna JSON-RPC valido com `supported_versions` e `workaround`
+- Status 200 (nao 400) para que o agente consiga parsear
+- Logging de versao requisitada
 
-Quando `total_results === 0`:
-- Retornar `_suggestions.available_domains` com contagem de módulos por domínio
-- Retornar `_suggestions.similar_tags` — tags que mais se aproximam dos termos buscados
-- Retornar `_suggestions.try_diagnose` — sugerir `devvault_diagnose` se o query parece ser uma mensagem de erro
+**Veredicto:** Sucesso total.
 
-### Ação 4: Quick Reference Condensado no Bootstrap
-**Arquivo:** `supabase/functions/_shared/mcp-tools/bootstrap.ts`
+### Documentacao e Comentarios
 
-Adicionar um `_quick_reference` no topo da resposta com as 5 tools mais usadas e seus one-liners, ANTES do `_agent_guide` completo. Agentes com contexto limitado conseguem operar com apenas isso:
-
-```json
-{
-  "_quick_reference": {
-    "search": "devvault_search({query: 'seu problema'})",
-    "get": "devvault_get({slug: 'module-slug'})",
-    "diagnose": "devvault_diagnose({error_message: 'erro literal'})",
-    "ingest": "devvault_ingest({title, code, why_it_matters, ...})",
-    "list": "devvault_list({domain: 'backend'})"
-  }
-}
-```
-
-### Ação 5: Suporte Multi-Protocol Version no Transport
-**Arquivo:** `supabase/functions/devvault-mcp/index.ts`
-
-Adicionar middleware que intercepta o header `MCP-Protocol-Version` e:
-- Se o servidor não suporta a versão requisitada, retornar resposta JSON-RPC válida com `supported_versions` em vez de `400 Bad Request` cru
-- Logar a versão requisitada para monitorar quando upgrade for necessário
+- `bootstrap.ts` header diz "Tools: 25 total" -- correto
+- `index.ts` header lista todas as 25 tools -- correto
+- `register.ts` header diz "Total tools: 25" -- correto
+- `error-helpers.ts` tem JSDoc completo e correto
+- Nenhum comentario desatualizado encontrado
 
 ---
 
-## Arquivos Afetados
+## Plano de Correcao: Aplicar error-helpers em TODAS as tools restantes
+
+A unica falha e a aplicacao parcial do `errorResponse()`. O plano e substituir todos os `Error: ${error.message}` e `Uncaught error: ${String(err)}` raw por chamadas a `errorResponse()` ou `classifyRpcError()` nos 17 arquivos restantes.
+
+### Arquivos a editar (17 total):
 
 ```text
 supabase/functions/_shared/mcp-tools/
-├── error-helpers.ts          (NOVO — factory de respostas de erro)
-├── bootstrap.ts              (EDITAR — adicionar _quick_reference)
-├── ingest.ts                 (EDITAR — validação proativa + _missing_for_100)
-├── search.ts                 (EDITAR — fallback inteligente para busca vazia)
-supabase/functions/devvault-mcp/
-├── index.ts                  (EDITAR — middleware de protocol version)
+├── bootstrap.ts          (2 pontos: RPC error + uncaught)
+├── search.ts             (1 ponto: uncaught)
+├── list.ts               (2 pontos: RPC error + uncaught)
+├── domains.ts            (2 pontos: RPC error + uncaught)
+├── update.ts             (3 pontos: input validation + RPC error + uncaught)
+├── delete.ts             (3 pontos: 2 RPC errors + uncaught)
+├── changelog.ts          (2 pontos: RPC errors)
+├── get-group.ts          (1 ponto: RPC error)
+├── quickstart.ts         (2 pontos: RPC error + uncaught)
+├── export-tree.ts        (3 pontos: RPC errors)
+├── load-context.ts       (3 pontos: RPC errors)
+├── report-bug.ts         (2 pontos: RPC error + uncaught)
+├── resolve-bug.ts        (3 pontos: validation + RPC + uncaught)
+├── report-success.ts     (2 pontos: RPC error + uncaught)
+├── check-updates.ts      (pontos de erro)
+├── get-playbook.ts       (1 ponto: RPC error)
+├── diagnose-troubleshoot.ts (1 ponto: uncaught)
 ```
 
-## Prioridade de Implementação
-1. **error-helpers.ts** + aplicar em `get.ts` e `ingest.ts` (maior impacto imediato)
-2. **ingest.ts** validação proativa (previne módulos de baixa qualidade)
-3. **search.ts** fallback inteligente (resolve frustração de busca vazia)
-4. **bootstrap.ts** quick reference (melhora onboarding)
-5. **index.ts** protocol version (estabilidade de conexão)
+### Padrao de correcao:
+
+Para **RPC errors**:
+```typescript
+// ANTES (raw)
+return { content: [{ type: "text", text: `Error: ${error.message}` }] };
+
+// DEPOIS (actionable)
+return errorResponse({ code: classifyRpcError(error.message), message: error.message });
+```
+
+Para **uncaught errors**:
+```typescript
+// ANTES (raw)
+return { content: [{ type: "text", text: `Uncaught error: ${String(err)}` }] };
+
+// DEPOIS (actionable)
+return errorResponse({ code: "INTERNAL_ERROR", message: String(err) });
+```
+
+Para **input validation**:
+```typescript
+// ANTES (raw)
+return { content: [{ type: "text", text: "Error: Provide either 'id' or 'slug'" }] };
+
+// DEPOIS (actionable)
+return errorResponse({ code: "INVALID_INPUT", message: "Provide either 'id' or 'slug'." });
+```
+
+Cada arquivo recebe `import { errorResponse, classifyRpcError } from "./error-helpers.ts";` no topo.
 
