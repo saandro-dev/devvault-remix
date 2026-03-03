@@ -8,6 +8,7 @@
 import { createLogger } from "../logger.ts";
 import { generateEmbedding } from "../embedding-client.ts";
 import { trackUsage } from "./usage-tracker.ts";
+import { errorResponse } from "./error-helpers.ts";
 import type { ToolRegistrar } from "./types.ts";
 
 const logger = createLogger("mcp-tool:search");
@@ -74,7 +75,7 @@ export const registerSearchTool: ToolRegistrar = (server, client, auth) => {
 
           if (error) {
             logger.error("hybrid search failed", { error: error.message });
-            return { content: [{ type: "text", text: `Error: ${error.message}` }] };
+            return errorResponse({ code: "RPC_FAILURE", message: error.message });
           }
 
           const rawModules = data as Record<string, unknown>[];
@@ -86,6 +87,10 @@ export const registerSearchTool: ToolRegistrar = (server, client, auth) => {
             query_text: queryText,
             result_count: modules.length,
           });
+
+          if (modules.length === 0) {
+            return buildEmptySearchResponse(client, queryText, params);
+          }
 
           return {
             content: [{
@@ -110,7 +115,7 @@ export const registerSearchTool: ToolRegistrar = (server, client, auth) => {
 
         if (error) {
           logger.error("search failed", { error: error.message });
-          return { content: [{ type: "text", text: `Error: ${error.message}` }] };
+          return errorResponse({ code: "RPC_FAILURE", message: error.message });
         }
 
         const rawModules = data as Record<string, unknown>[];
@@ -125,6 +130,10 @@ export const registerSearchTool: ToolRegistrar = (server, client, auth) => {
           query_text: queryText,
           result_count: modules.length,
         });
+
+        if (modules.length === 0) {
+          return buildEmptySearchResponse(client, undefined, params);
+        }
 
         return {
           content: [{
@@ -175,4 +184,65 @@ async function enrichWithRelations(
     is_depended_upon: hasDependentsSet.has(m.id as string),
     related_modules_count: (m.related_modules as string[] | null)?.length ?? 0,
   }));
+}
+
+/**
+ * Builds an intelligent empty-search response with suggestions.
+ */
+async function buildEmptySearchResponse(
+  client: Parameters<ToolRegistrar>[1],
+  queryText: string | undefined,
+  params: Record<string, unknown>,
+) {
+  // Fetch available domains with counts
+  const { data: domains } = await client.rpc("list_vault_domains");
+
+  const suggestions: Record<string, unknown> = {
+    available_domains: domains ?? [],
+    _hint: "No modules matched your search. Try the suggestions below.",
+  };
+
+  // If query looks like an error message, suggest diagnose
+  if (queryText) {
+    const looksLikeError =
+      /error|exception|failed|cannot|undefined|null|crash|timeout|401|403|404|500/i.test(queryText);
+    if (looksLikeError) {
+      suggestions.try_diagnose = {
+        tool: "devvault_diagnose",
+        call: `devvault_diagnose({error_message: "${queryText.substring(0, 100)}"})`,
+        reason: "Your query looks like an error message. devvault_diagnose searches common_errors and solves_problems fields.",
+      };
+    }
+
+    // Suggest broadening: remove filters
+    const activeFilters: string[] = [];
+    if (params.domain) activeFilters.push(`domain: '${params.domain}'`);
+    if (params.module_type) activeFilters.push(`module_type: '${params.module_type}'`);
+    if (params.tags) activeFilters.push(`tags: ${JSON.stringify(params.tags)}`);
+    if (activeFilters.length > 0) {
+      suggestions.try_without_filters = {
+        reason: `You have active filters (${activeFilters.join(", ")}). Try removing them to broaden results.`,
+        call: `devvault_search({query: "${queryText.substring(0, 80)}"})`,
+      };
+    }
+  }
+
+  suggestions.alternative_actions = [
+    "devvault_list({domain: 'backend'}) — Browse modules by domain",
+    "devvault_domains() — See all available domains and module counts",
+    "devvault_diagnose({error_message: '...'}) — Search by error message",
+    "devvault_load_context({tags: ['tag1']}) — Find modules by tags across projects",
+  ];
+
+  return {
+    content: [{
+      type: "text" as const,
+      text: JSON.stringify({
+        total_results: 0,
+        search_mode: queryText ? "hybrid" : "list",
+        modules: [],
+        _suggestions: suggestions,
+      }, null, 2),
+    }],
+  };
 }

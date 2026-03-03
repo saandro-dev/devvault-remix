@@ -9,6 +9,7 @@ import { createLogger } from "../logger.ts";
 import { batchInsertDependencies } from "../dependency-helpers.ts";
 import { updateModuleEmbedding } from "../embedding-client.ts";
 import { getCompleteness } from "./completeness.ts";
+import { errorResponse, classifyRpcError } from "./error-helpers.ts";
 import type { ToolRegistrar } from "./types.ts";
 
 const logger = createLogger("mcp-tool:ingest");
@@ -138,7 +139,11 @@ export const registerIngestTool: ToolRegistrar = (server, client, auth) => {
 
       if (error) {
         logger.error("ingest failed", { error: error.message });
-        return { content: [{ type: "text", text: `Error: ${error.message}` }] };
+        return errorResponse({
+          code: classifyRpcError(error.message),
+          message: error.message,
+          details: { title: params.title as string },
+        });
       }
 
       const deps = params.dependencies as Array<{ depends_on_id?: string; depends_on?: string; dependency_type?: string }> | undefined;
@@ -159,6 +164,16 @@ export const registerIngestTool: ToolRegistrar = (server, client, auth) => {
       const completeness = await getCompleteness(client, data.id);
       logger.info("module ingested via MCP", { moduleId: data.id, userId: auth.userId });
 
+      // Proactive quality assessment
+      const score = completeness?.score ?? 0;
+      const missingFields = completeness?.missing_fields ?? [];
+      let qualityWarning: string | undefined;
+      if (score < 50) {
+        qualityWarning = "critical";
+      } else if (score < 80) {
+        qualityWarning = "low";
+      }
+
       return {
         content: [{
           type: "text",
@@ -166,8 +181,15 @@ export const registerIngestTool: ToolRegistrar = (server, client, auth) => {
             success: true,
             module: data,
             _completeness: completeness,
+            _quality_warning: qualityWarning,
+            _missing_for_100: missingFields.length > 0 ? missingFields : undefined,
             _warnings: warnings.length > 0 ? warnings : undefined,
-            _hint: "Module created as 'draft'. Use devvault_get to verify it was saved correctly.",
+            _hint: qualityWarning === "critical"
+              ? `⚠️ CRITICAL: Module score is ${score}/100. Missing fields: ${missingFields.join(", ")}. ` +
+                "Use devvault_update to add the missing fields NOW for maximum agent utility."
+              : qualityWarning === "low"
+              ? `⚠️ LOW QUALITY: Module score is ${score}/100. Consider adding: ${missingFields.join(", ")}.`
+              : "Module created as 'draft'. Use devvault_get to verify it was saved correctly.",
           }, null, 2),
         }],
       };
