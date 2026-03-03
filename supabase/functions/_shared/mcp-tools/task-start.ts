@@ -77,6 +77,9 @@ export const registerTaskStartTool: ToolRegistrar = (server, client, auth) => {
                 "IMPORTANT: Save this task_id. When your task is complete, call " +
                 "devvault_task_end({ task_id, status, modules_used, outcome_notes }) " +
                 "to close it. Valid statuses: 'success', 'failure', 'abandoned'.",
+              _mandatory_hint:
+                "If starting a NEW project, call devvault_mandatory now to check which " +
+                "foundation modules are REQUIRED (hard-enforcement = blockers).",
             }, null, 2),
           }],
         };

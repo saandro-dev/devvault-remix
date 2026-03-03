@@ -540,6 +540,62 @@ export type Database = {
           },
         ]
       }
+      vault_mandatory_rules: {
+        Row: {
+          condition_description: string | null
+          created_at: string
+          enabled: boolean
+          enforcement: Database["public"]["Enums"]["mandatory_enforcement"]
+          id: string
+          is_conditional: boolean
+          layer: number
+          layer_name: string
+          module_id: string
+          reason: string
+          scope: Database["public"]["Enums"]["mandatory_scope"]
+          scope_value: string | null
+          updated_at: string
+        }
+        Insert: {
+          condition_description?: string | null
+          created_at?: string
+          enabled?: boolean
+          enforcement?: Database["public"]["Enums"]["mandatory_enforcement"]
+          id?: string
+          is_conditional?: boolean
+          layer?: number
+          layer_name?: string
+          module_id: string
+          reason: string
+          scope?: Database["public"]["Enums"]["mandatory_scope"]
+          scope_value?: string | null
+          updated_at?: string
+        }
+        Update: {
+          condition_description?: string | null
+          created_at?: string
+          enabled?: boolean
+          enforcement?: Database["public"]["Enums"]["mandatory_enforcement"]
+          id?: string
+          is_conditional?: boolean
+          layer?: number
+          layer_name?: string
+          module_id?: string
+          reason?: string
+          scope?: Database["public"]["Enums"]["mandatory_scope"]
+          scope_value?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vault_mandatory_rules_module_id_fkey"
+            columns: ["module_id"]
+            isOneToOne: true
+            referencedRelation: "vault_modules"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       vault_module_changelog: {
         Row: {
           changes: string[]
@@ -945,6 +1001,10 @@ export type Database = {
           grand_total: number
         }[]
       }
+      get_mandatory_modules: {
+        Args: { p_layer?: number; p_scope?: string; p_scope_value?: string }
+        Returns: Json
+      }
       get_user_id_by_email: { Args: { p_email: string }; Returns: string }
       get_user_role: { Args: { _user_id: string }; Returns: string }
       get_vault_module: {
@@ -1208,6 +1268,8 @@ export type Database = {
     Enums: {
       app_role: "admin" | "moderator" | "user" | "owner"
       bug_status: "open" | "resolved"
+      mandatory_enforcement: "hard" | "soft"
+      mandatory_scope: "global" | "domain" | "project_type"
       project_environment: "dev" | "staging" | "prod"
       vault_category: "frontend" | "backend" | "devops" | "security"
       vault_domain:
@@ -1355,6 +1417,8 @@ export const Constants = {
     Enums: {
       app_role: ["admin", "moderator", "user", "owner"],
       bug_status: ["open", "resolved"],
+      mandatory_enforcement: ["hard", "soft"],
+      mandatory_scope: ["global", "domain", "project_type"],
       project_environment: ["dev", "staging", "prod"],
       vault_category: ["frontend", "backend", "devops", "security"],
       vault_domain: [
