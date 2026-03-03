@@ -150,6 +150,10 @@ export const registerTaskEndTool: ToolRegistrar = (server, client, auth) => {
                 `Task "${updatedTask.objective}" closed as ${updatedTask.status} ` +
                 `after ${durationMin > 0 ? durationMin + " minutes" : durationSec + " seconds"} ` +
                 `with ${(updatedTask.modules_used as string[]).length} modules used.`,
+              _compliance_hint:
+                "To verify all mandatory modules were implemented, call " +
+                "devvault_mandatory({ check_compliance: ['slug-1', 'slug-2', ...] }) " +
+                "with the slugs of modules you used.",
             }, null, 2),
           }],
         };

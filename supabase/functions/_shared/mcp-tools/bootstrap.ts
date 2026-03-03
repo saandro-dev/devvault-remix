@@ -7,7 +7,7 @@
  *
  * This is the ONLY entry point an AI agent needs — no external docs required.
  *
- * Tools: 28 total.
+ * Tools: 29 total.
  */
 
 import { createLogger } from "../logger.ts";
@@ -22,13 +22,15 @@ const logger = createLogger("mcp-tool:bootstrap");
 
 const AGENT_GUIDE = {
   _purpose:
-    "This guide teaches AI agents how to use DevVault's 28 MCP tools effectively. " +
+    "This guide teaches AI agents how to use DevVault's 29 MCP tools effectively. " +
     "Read it once after bootstrap, then follow the workflow. " +
-    "CRITICAL: When debugging errors, ALWAYS consult devvault_diagnose BEFORE manual fixes.",
+    "CRITICAL: When debugging errors, ALWAYS consult devvault_diagnose BEFORE manual fixes. " +
+    "CRITICAL: Before starting any new project, call devvault_mandatory to understand required foundation modules.",
 
   recommended_workflow: [
     "0. TASK START — Call devvault_task_start with your objective to begin tracking this work session.",
     "1. BOOTSTRAP — You already called this. Review domains, phases, playbooks, and top modules below.",
+    "1.5. MANDATORY CHECK — Call devvault_mandatory to see which foundation modules are REQUIRED. If starting a new project, implement hard-enforcement modules first.",
     "2. CHECK PLAYBOOKS — Review playbooks_index below. If a playbook matches your goal, call devvault_get_playbook to get the full plan.",
     "3. DISCOVER — Use devvault_search (semantic + full-text) or devvault_list (browsing with filters) to find relevant modules.",
     "4. RETRIEVE — Use devvault_get (by id or slug) to fetch full code, dependencies, and context_markdown.",
@@ -37,7 +39,7 @@ const AGENT_GUIDE = {
     "7. REPORT OUTCOME — Use devvault_report_success on success, or devvault_diary_bug on failure.",
     "8. CONTRIBUTE BACK — Use devvault_ingest (single) or devvault_batch_ingest (bulk) to add new knowledge.",
     "9. CHECK DUPLICATES — Before ingesting, use devvault_similar to check for existing similar modules.",
-    "10. TASK END — Call devvault_task_end with your task_id, status (success/failure/abandoned), and modules_used.",
+    "10. TASK END — Call devvault_task_end with your task_id, status (success/failure/abandoned), and modules_used. Use check_compliance param in devvault_mandatory to verify all mandatory modules were implemented.",
   ],
 
   tool_catalog: {
@@ -119,11 +121,19 @@ const AGENT_GUIDE = {
         "End a task with status (success/failure/abandoned), modules_used, and outcome_notes. " +
         "Call at the END of every work session. This data helps measure module ROI.",
     },
+    compliance: {
+      devvault_mandatory:
+        "Returns mandatory modules that MUST be implemented in any project. " +
+        "Supports compliance checking (pass implemented slugs to get a report). " +
+        "Filter by scope (global/domain/project_type) and layer (1-6). " +
+        "Hard-enforcement modules are BLOCKERS — soft-enforcement are warnings.",
+    },
   },
 
   behavioral_rules: [
     "ALWAYS call devvault_bootstrap first to understand available knowledge before searching.",
     "ALWAYS call devvault_task_start at the beginning of a work session to track your objective.",
+    "ALWAYS call devvault_mandatory after bootstrap when starting a NEW project to understand required foundation modules.",
     "ALWAYS call devvault_task_end at the end of a work session with the correct status and modules_used.",
     "CHECK playbooks_index for curated implementation plans before searching module by module.",
     "ALWAYS fetch required dependencies (prerequisites) before implementing a module.",
@@ -149,6 +159,7 @@ const AGENT_GUIDE = {
     "Do NOT use devvault_report_bug for user project bugs — use devvault_diary_bug instead.",
     "Do NOT forget to call devvault_task_end — abandoned tasks without closure pollute analytics.",
     "Do NOT omit database_schema for DB-interacting modules when the source project schema is available — modules without it score 15 points lower in validation and agents lose critical context for correct implementation.",
+    "Do NOT skip devvault_mandatory when starting a new project — hard-enforcement modules are BLOCKERS and must be implemented first.",
   ],
 };
 
@@ -157,7 +168,8 @@ export const registerBootstrapTool: ToolRegistrar = (server, client) => {
     description:
       "ALWAYS call this first. Returns the full index of the DevVault Knowledge Graph: " +
       "domains, playbook phases, published playbooks, top validated modules, AND a complete " +
-      "workflow guide explaining how to use all 28 tools effectively.",
+      "workflow guide explaining how to use all 29 tools effectively. " +
+      "After bootstrap, call devvault_mandatory to check required foundation modules.",
     inputSchema: { type: "object", properties: {}, required: [] },
     handler: async () => {
       logger.info("invoked");
