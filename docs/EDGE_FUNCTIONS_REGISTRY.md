@@ -1,7 +1,7 @@
 # DevVault - Edge Functions Registry
 
 > **🔴 SINGLE SOURCE OF TRUTH** - This document lists ALL 16 Edge Functions deployed on Supabase for the DevVault project.
-> Last updated: 2026-03-02
+> Last updated: 2026-03-03
 > Maintainer: AI Architect
 
 ---
@@ -240,5 +240,5 @@ To limit the "blast radius" in case of a key leak, the system uses two service k
 
 | Function | Auth | Domain | Description |
 | :--- | :--- | :--- | :--- |
-| `vault-backfill` | Manual | general | **Unified backfill engine for vault module enrichment.** Uses Strategy Pattern with shared `_shared/backfill-engine.ts`. Supports batch processing, exponential backoff retries, structural validation, dry_run mode, and progress tracking. **Actions:** `diagnose-fields` (GPT-4o-mini → `common_errors` + `solves_problems`), `context-fields` (GPT-4o-mini → `context_markdown` + `test_code`), `changelog-seed` (pure SQL → v1 changelog entries), `embeddings` (OpenAI → vector embeddings). POST `{ action, limit?, dry_run? }`. |
+| `vault-backfill` | Manual | general | **Unified backfill engine for vault module enrichment.** Uses Strategy Pattern with shared `_shared/backfill-engine.ts`. Supports batch processing, exponential backoff retries, structural validation, dry_run mode, and progress tracking. **Actions:** `diagnose-fields` (GPT-4o-mini → `common_errors` + `solves_problems`), `context-fields` (GPT-4o-mini → `context_markdown` + `test_code`), `changelog-seed` (pure SQL → v1 changelog entries), `embeddings` (OpenAI → vector embeddings), `auto-dependencies` (SQL + heuristics → cross-module dependency links in `vault_module_dependencies`). POST `{ action, limit?, dry_run? }`. |
 | `vault-backfill-playbooks` | Manual | general | **Playbook backfill from module_groups.** Converts `module_group` values into `vault_playbooks` and `vault_playbook_modules` records. Idempotent (skips existing slugs). Params: `owner_user_id` (required), `min_modules` (default 3), `dry_run` (default false). Not part of the unified engine because it creates separate entities (playbooks), not field enrichments on `vault_modules`. |

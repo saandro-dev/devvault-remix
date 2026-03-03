@@ -12,7 +12,7 @@ DevVault operates with two distinct access channels, each with a clearly defined
 
 ### Primary Channel — AI Agents via MCP (90%+ of real system usage)
 
-AI agents connect to the DevVault MCP server and interact with the knowledge base through **22 structured tools**. This is the core use case of the product.
+AI agents connect to the DevVault MCP server and interact with the knowledge base through **25 structured tools**. This is the core use case of the product.
 
 **MCP Endpoint:** `https://<project>.supabase.co/functions/v1/devvault-mcp`
 **Authentication:** API key (`dvlt_...`) via `X-DevVault-Key` header
@@ -50,7 +50,7 @@ Human users access the web interface to act as **curators and administrators** o
 | Auth (Agents) | Custom API keys (`dvlt_...`) via Supabase Vault |
 | Search | Hybrid: `pgvector` (semantic) + `tsvector` (full-text) + `pg_trgm` |
 | Secrets | Supabase Vault (pgsodium encryption) |
-| Agent Protocol | MCP (Model Context Protocol) — 22 tools |
+| Agent Protocol | MCP (Model Context Protocol) — 25 tools |
 
 ---
 
@@ -62,6 +62,8 @@ Human users access the web interface to act as **curators and administrators** o
 | **CRUD** | `devvault_ingest`, `devvault_update`, `devvault_delete`, `devvault_validate`, `devvault_changelog` |
 | **Diagnostics** | `devvault_diagnose`, `devvault_check_updates`, `devvault_export_tree` |
 | **Bug Diary** | `devvault_diary_bug`, `devvault_diary_resolve`, `devvault_diary_list`, `devvault_report_bug`, `devvault_resolve_bug` |
+| **Playbooks** | `devvault_get_playbook` |
+| **Task Tracking** | `devvault_task_start`, `devvault_task_end` |
 | **Reporting** | `devvault_report_success` |
 
 ---
