@@ -191,6 +191,14 @@ export const registerBootstrapTool: ToolRegistrar = (server, client) => {
         }
 
         const response = {
+          _quick_reference: {
+            _purpose: "5 most-used tools. Enough to operate with minimal context.",
+            search: "devvault_search({query: 'your problem or keywords'})",
+            get: "devvault_get({slug: 'module-slug'}) or devvault_get({id: 'uuid'})",
+            diagnose: "devvault_diagnose({error_message: 'paste the error here'})",
+            ingest: "devvault_ingest({title: '...', code: '...', why_it_matters: '...', code_example: '...', tags: [...]})",
+            list: "devvault_list({domain: 'backend'}) — browse by domain/type",
+          },
           _agent_guide: AGENT_GUIDE,
           knowledge_graph: data,
           playbooks_index: playbooksIndex,

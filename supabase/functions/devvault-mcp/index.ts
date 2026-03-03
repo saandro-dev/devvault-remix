@@ -76,9 +76,21 @@ const httpHandler = transport.bind(mcp);
 
 const app = new Hono();
 
+// Known supported protocol versions
+const SUPPORTED_PROTOCOL_VERSIONS = ["2025-03-26"];
+
 app.all("/*", async (c) => {
   if (c.req.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: CORS_HEADERS });
+  }
+
+  // ─── Protocol Version Negotiation ─────────────────────────────────────
+  const requestedVersion = c.req.raw.headers.get("mcp-protocol-version");
+  if (requestedVersion) {
+    logger.info("protocol version requested", {
+      requested: requestedVersion,
+      supported: SUPPORTED_PROTOCOL_VERSIONS,
+    });
   }
 
   logger.info("incoming request", {
@@ -87,6 +99,7 @@ app.all("/*", async (c) => {
     hasApiKey: c.req.raw.headers.has("x-api-key"),
     hasAuthorization: c.req.raw.headers.has("authorization"),
     url: c.req.url,
+    protocolVersion: requestedVersion,
   });
 
   const authResult = await authenticateRequest(c.req.raw);
@@ -103,6 +116,36 @@ app.all("/*", async (c) => {
 
   try {
     const mcpResponse = await httpHandler(c.req.raw);
+
+    // Intercept protocol version mismatch (raw 400 from mcp-lite)
+    if (mcpResponse.status === 400 && requestedVersion && !SUPPORTED_PROTOCOL_VERSIONS.includes(requestedVersion)) {
+      const body = await mcpResponse.clone().text();
+      if (body.toLowerCase().includes("protocol version")) {
+        logger.warn("protocol version mismatch intercepted", {
+          requested: requestedVersion,
+          supported: SUPPORTED_PROTOCOL_VERSIONS,
+        });
+        return withCors(new Response(
+          JSON.stringify({
+            jsonrpc: "2.0",
+            error: {
+              code: -32001,
+              message: `Protocol version '${requestedVersion}' is not supported. ` +
+                `Supported versions: ${SUPPORTED_PROTOCOL_VERSIONS.join(", ")}. ` +
+                `POST requests with JSON-RPC still work via fallback.`,
+              data: {
+                requested_version: requestedVersion,
+                supported_versions: SUPPORTED_PROTOCOL_VERSIONS,
+                workaround: "Use POST with Content-Type: application/json for tool calls. SSE streaming may not work with unsupported versions.",
+              },
+            },
+            id: null,
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        ));
+      }
+    }
+
     const cloned = mcpResponse.clone();
     const bodyText = await cloned.text();
     logger.info("transport response", {
@@ -120,7 +163,13 @@ app.all("/*", async (c) => {
     return withCors(new Response(
       JSON.stringify({
         jsonrpc: "2.0",
-        error: { code: -32603, message: `Internal MCP error: ${String(err)}` },
+        error: {
+          code: -32603,
+          message: `Internal MCP error: ${String(err)}`,
+          data: {
+            _recovery_hint: "Retry the request. If the error persists, report via devvault_diary_bug.",
+          },
+        },
         id: null,
       }),
       { status: 500, headers: { "Content-Type": "application/json" } }

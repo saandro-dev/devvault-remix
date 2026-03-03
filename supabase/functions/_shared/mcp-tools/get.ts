@@ -9,6 +9,7 @@ import { createLogger } from "../logger.ts";
 import { enrichModuleDependencies } from "../dependency-helpers.ts";
 import { getCompleteness } from "./completeness.ts";
 import { trackUsage } from "./usage-tracker.ts";
+import { errorResponse, classifyRpcError } from "./error-helpers.ts";
 import type { ToolRegistrar } from "./types.ts";
 
 const logger = createLogger("mcp-tool:get");
@@ -34,7 +35,11 @@ export const registerGetTool: ToolRegistrar = (server, client, auth) => {
     },
     handler: async (params: Record<string, unknown>) => {
       if (!params.id && !params.slug) {
-        return { content: [{ type: "text", text: "Error: Provide either 'id' or 'slug'" }] };
+        return errorResponse({
+          code: "INVALID_INPUT",
+          message: "Provide either 'id' (UUID) or 'slug' (string).",
+          details: { expected: "id or slug parameter" },
+        });
       }
 
       // Auto-detect: if id is provided but not a valid UUID, treat as slug
@@ -50,11 +55,19 @@ export const registerGetTool: ToolRegistrar = (server, client, auth) => {
       const { data, error } = await client.rpc("get_vault_module", rpcParams);
       if (error) {
         logger.error("get failed", { error: error.message });
-        return { content: [{ type: "text", text: `Error: ${error.message}` }] };
+        return errorResponse({
+          code: classifyRpcError(error.message),
+          message: error.message,
+          details: { rpc: "get_vault_module", params: rpcParams },
+        });
       }
 
       if (!data || (data as unknown[]).length === 0) {
-        return { content: [{ type: "text", text: "Module not found" }] };
+        return errorResponse({
+          code: "MODULE_NOT_FOUND",
+          message: `No module found for ${params.slug ? `slug '${params.slug}'` : `id '${params.id}'`}.`,
+          details: { searched_by: params.slug ? "slug" : "id", value: (params.slug ?? params.id) as string },
+        });
       }
 
       const mod = (data as Record<string, unknown>[])[0];
