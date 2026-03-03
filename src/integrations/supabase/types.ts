@@ -924,6 +924,19 @@ export type Database = {
           version: string
         }[]
       }
+      find_similar_modules: {
+        Args: { p_limit?: number; p_module_id: string; p_threshold?: number }
+        Returns: {
+          description: string
+          domain: string
+          id: string
+          module_type: string
+          similarity_score: number
+          slug: string
+          tags: string[]
+          title: string
+        }[]
+      }
       get_domain_counts: {
         Args: { p_scope?: string; p_user_id: string }
         Returns: {

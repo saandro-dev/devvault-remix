@@ -2,11 +2,13 @@
  * mcp-tools/update.ts — devvault_update tool.
  *
  * Partial update of an existing module by ID or slug.
+ * Supports append operations for array fields (tags, solves_problems, common_errors).
  * Returns updated completeness score after mutation.
  */
 
 import { createLogger } from "../logger.ts";
 import { updateModuleEmbedding } from "../embedding-client.ts";
+import { trackUsage } from "./usage-tracker.ts";
 import { errorResponse, classifyRpcError } from "./error-helpers.ts";
 import { getCompleteness } from "./completeness.ts";
 import type { ToolRegistrar } from "./types.ts";
@@ -26,8 +28,10 @@ export const registerUpdateTool: ToolRegistrar = (server, client, auth) => {
     description:
       "Update an existing module by ID or slug. Supports partial updates — only the " +
       "fields you provide will be changed. Use this to fill missing fields like " +
-      "why_it_matters, code_example, fix language, update tags, etc. Returns the " +
-      "updated completeness score.",
+      "why_it_matters, code_example, fix language, update tags, etc. " +
+      "APPEND OPERATIONS: Use append_tags, append_solves_problems, or append_common_errors " +
+      "to add items to existing arrays without replacing them (avoids race conditions). " +
+      "Returns the updated completeness score.",
     inputSchema: {
       type: "object",
       properties: {
@@ -48,8 +52,8 @@ export const registerUpdateTool: ToolRegistrar = (server, client, auth) => {
         module_group: { type: "string" },
         implementation_order: { type: "number" },
         validation_status: { type: "string", enum: ["draft", "validated", "deprecated"] },
-        common_errors: { type: "array", items: { type: "object" }, description: "Common errors [{error, cause, fix}]" },
-        solves_problems: { type: "array", items: { type: "string" }, description: "Problems this module solves" },
+        common_errors: { type: "array", items: { type: "object" }, description: "Common errors [{error, cause, fix}] — REPLACES existing" },
+        solves_problems: { type: "array", items: { type: "string" }, description: "Problems this module solves — REPLACES existing" },
         test_code: { type: "string", description: "Quick validation code" },
         difficulty: { type: "string", enum: ["beginner", "intermediate", "advanced"] },
         estimated_minutes: { type: "number", description: "Estimated implementation time" },
@@ -64,6 +68,20 @@ export const registerUpdateTool: ToolRegistrar = (server, client, auth) => {
             env_vars_required: { type: "array", items: { type: "string" } },
             ai_rules: { type: "array", items: { type: "string" } },
           },
+        },
+        // Append operations
+        append_tags: {
+          type: "array", items: { type: "string" },
+          description: "Tags to ADD to existing tags (without replacing). Deduplicated automatically.",
+        },
+        append_solves_problems: {
+          type: "array", items: { type: "string" },
+          description: "Problems to ADD to existing solves_problems (without replacing). Deduplicated automatically.",
+        },
+        append_common_errors: {
+          type: "array",
+          items: { type: "object", properties: { error: { type: "string" }, cause: { type: "string" }, fix: { type: "string" } }, required: ["error", "cause", "fix"] },
+          description: "Common errors to ADD to existing common_errors (without replacing).",
         },
       },
       required: [],
@@ -91,8 +109,42 @@ export const registerUpdateTool: ToolRegistrar = (server, client, auth) => {
         if (params[field] !== undefined) updateFields[field] = params[field];
       }
 
-      if (Object.keys(updateFields).length === 0) {
-        return errorResponse({ code: "INVALID_INPUT", message: "No fields to update. Provide at least one field from the inputSchema." });
+      // Handle append operations
+      const hasAppendOps = params.append_tags || params.append_solves_problems || params.append_common_errors;
+
+      if (Object.keys(updateFields).length === 0 && !hasAppendOps) {
+        return errorResponse({ code: "INVALID_INPUT", message: "No fields to update. Provide at least one field or append operation." });
+      }
+
+      // If we have append operations, fetch current values first
+      if (hasAppendOps) {
+        const { data: current } = await client
+          .from("vault_modules")
+          .select("tags, solves_problems, common_errors")
+          .eq("id", moduleId!)
+          .single();
+
+        if (!current) {
+          return errorResponse({ code: "MODULE_NOT_FOUND", message: "Module not found for append operation." });
+        }
+
+        if (params.append_tags && !updateFields.tags) {
+          const existingTags = (current as Record<string, unknown>).tags as string[] ?? [];
+          const newTags = params.append_tags as string[];
+          updateFields.tags = [...new Set([...existingTags, ...newTags])];
+        }
+
+        if (params.append_solves_problems && !updateFields.solves_problems) {
+          const existing = (current as Record<string, unknown>).solves_problems as string[] ?? [];
+          const newItems = params.append_solves_problems as string[];
+          updateFields.solves_problems = [...new Set([...existing, ...newItems])];
+        }
+
+        if (params.append_common_errors && !updateFields.common_errors) {
+          const existing = (current as Record<string, unknown>).common_errors as unknown[] ?? [];
+          const newItems = params.append_common_errors as unknown[];
+          updateFields.common_errors = [...existing, ...newItems];
+        }
       }
 
       const { data, error } = await client
@@ -111,7 +163,6 @@ export const registerUpdateTool: ToolRegistrar = (server, client, auth) => {
       const embeddingFields = ["title", "description", "why_it_matters", "tags", "solves_problems", "usage_hint", "code"];
       const needsEmbedding = embeddingFields.some((f) => updateFields[f] !== undefined);
       if (needsEmbedding) {
-        // Fetch current module data to build complete embedding input
         const { data: fullMod } = await client
           .from("vault_modules")
           .select("title, description, why_it_matters, usage_hint, tags, solves_problems")
@@ -123,6 +174,14 @@ export const registerUpdateTool: ToolRegistrar = (server, client, auth) => {
       }
 
       const completeness = await getCompleteness(client, moduleId!);
+
+      trackUsage(client, auth, {
+        event_type: "update",
+        tool_name: "devvault_update",
+        module_id: moduleId!,
+        result_count: 1,
+      });
+
       logger.info("module updated via MCP", { moduleId, userId: auth.userId, fields: Object.keys(updateFields) });
 
       return {

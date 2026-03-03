@@ -11,8 +11,49 @@ import type { AuthContext } from "./types.ts";
 
 const logger = createLogger("mcp-usage-tracker");
 
+/**
+ * Comprehensive union of all event types used across MCP tools.
+ * Keep in sync when adding new tools.
+ */
+type UsageEventType =
+  // Discovery
+  | "search"
+  | "search_miss"
+  | "get"
+  | "list"
+  | "get_group"
+  | "get_playbook"
+  | "load_context"
+  | "quickstart"
+  // CRUD
+  | "ingest"
+  | "batch_ingest"
+  | "update"
+  | "delete"
+  | "validate"
+  | "validate_batch"
+  | "changelog"
+  | "changelog_global"
+  // Diagnostics
+  | "diagnose"
+  | "health_check"
+  | "check_updates"
+  | "export_tree"
+  | "export_tree_roots"
+  // Bug diary
+  | "bug_reported"
+  | "bug_resolved"
+  | "success_reported"
+  | "diary_listed"
+  // Task tracking
+  | "task_start"
+  | "task_end"
+  // Analytics
+  | "similar"
+  | "stats";
+
 interface UsageEvent {
-  event_type: "search" | "get" | "list" | "get_group" | "diagnose" | "search_miss" | "bug_reported" | "bug_resolved" | "success_reported" | "export_tree" | "check_updates" | "get_playbook" | "task_start" | "task_end" | "validate" | "validate_batch";
+  event_type: UsageEventType;
   tool_name: string;
   module_id?: string;
   query_text?: string;

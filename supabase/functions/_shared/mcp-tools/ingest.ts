@@ -9,6 +9,7 @@ import { createLogger } from "../logger.ts";
 import { batchInsertDependencies } from "../dependency-helpers.ts";
 import { updateModuleEmbedding } from "../embedding-client.ts";
 import { getCompleteness } from "./completeness.ts";
+import { trackUsage } from "./usage-tracker.ts";
 import { errorResponse, classifyRpcError } from "./error-helpers.ts";
 import type { ToolRegistrar } from "./types.ts";
 
@@ -162,6 +163,14 @@ export const registerIngestTool: ToolRegistrar = (server, client, auth) => {
       updateModuleEmbedding(client, data.id, insertData);
 
       const completeness = await getCompleteness(client, data.id);
+
+      trackUsage(client, auth, {
+        event_type: "ingest",
+        tool_name: "devvault_ingest",
+        module_id: data.id,
+        result_count: 1,
+      });
+
       logger.info("module ingested via MCP", { moduleId: data.id, userId: auth.userId });
 
       // Proactive quality assessment

@@ -74,12 +74,13 @@ export const registerGetTool: ToolRegistrar = (server, client, auth) => {
       const moduleId = mod.id as string;
 
       // Parallel fetches: dependencies, completeness, group meta, changelog, related_modules
-      const [dependencies, completeness, moduleRaw, changelogResult, resolvedRelated] = await Promise.all([
+      const [dependencies, completeness, moduleRaw, changelogResult, resolvedRelated, usageStats] = await Promise.all([
         enrichModuleDependencies(client, moduleId),
         getCompleteness(client, moduleId),
         client.from("vault_modules").select("module_group, implementation_order").eq("id", moduleId).single(),
         client.from("vault_module_changelog").select("version, changes, created_at").eq("module_id", moduleId).order("created_at", { ascending: false }).limit(10),
         resolveRelatedModules(client, mod.related_modules as string[] | null),
+        fetchUsageStats(client, moduleId),
       ]);
 
       const hasRequired = dependencies.some(
@@ -128,6 +129,7 @@ export const registerGetTool: ToolRegistrar = (server, client, auth) => {
             _changelog: changelogResult.data ?? [],
             _completeness: completeness,
             _group: groupMeta,
+            _usage_stats: usageStats,
             _environment_setup: envInstructions.length > 0 ? envInstructions : undefined,
             _instructions: hasRequired
               ? "⚠️ This module has REQUIRED dependencies. You MUST fetch and implement each required dependency (via devvault_get) BEFORE implementing this module."
@@ -154,4 +156,35 @@ async function resolveRelatedModules(
     .in("id", uuids);
 
   return (data ?? []) as Array<{ id: string; slug: string | null; title: string }>;
+}
+
+/**
+ * Fetches usage statistics for a module from vault_usage_events and vault_agent_tasks.
+ */
+async function fetchUsageStats(
+  client: Parameters<ToolRegistrar>[1],
+  moduleId: string,
+): Promise<{ times_fetched: number; times_used_in_tasks: number; success_reports: number }> {
+  const [fetchResult, taskResult, successResult] = await Promise.all([
+    client
+      .from("vault_usage_events")
+      .select("id", { count: "exact", head: true })
+      .eq("module_id", moduleId)
+      .eq("event_type", "get"),
+    client
+      .from("vault_agent_tasks")
+      .select("id", { count: "exact", head: true })
+      .contains("modules_used", [moduleId]),
+    client
+      .from("vault_usage_events")
+      .select("id", { count: "exact", head: true })
+      .eq("module_id", moduleId)
+      .eq("event_type", "success_reported"),
+  ]);
+
+  return {
+    times_fetched: fetchResult.count ?? 0,
+    times_used_in_tasks: taskResult.count ?? 0,
+    success_reports: successResult.count ?? 0,
+  };
 }

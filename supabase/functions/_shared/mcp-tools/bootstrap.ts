@@ -7,7 +7,7 @@
  *
  * This is the ONLY entry point an AI agent needs — no external docs required.
  *
- * Tools: 25 total.
+ * Tools: 28 total.
  */
 
 import { createLogger } from "../logger.ts";
@@ -22,7 +22,7 @@ const logger = createLogger("mcp-tool:bootstrap");
 
 const AGENT_GUIDE = {
   _purpose:
-    "This guide teaches AI agents how to use DevVault's 25 MCP tools effectively. " +
+    "This guide teaches AI agents how to use DevVault's 28 MCP tools effectively. " +
     "Read it once after bootstrap, then follow the workflow. " +
     "CRITICAL: When debugging errors, ALWAYS consult devvault_diagnose BEFORE manual fixes.",
 
@@ -35,8 +35,9 @@ const AGENT_GUIDE = {
     "5. CHECK DEPENDENCIES — If the module has prerequisites, fetch each one with devvault_get before implementing.",
     "6. IMPLEMENT — Apply the code. If you encounter problems, use devvault_diagnose or devvault_diary_bug.",
     "7. REPORT OUTCOME — Use devvault_report_success on success, or devvault_diary_bug on failure.",
-    "8. CONTRIBUTE BACK — Use devvault_ingest to add new reusable knowledge you created during implementation.",
-    "9. TASK END — Call devvault_task_end with your task_id, status (success/failure/abandoned), and modules_used.",
+    "8. CONTRIBUTE BACK — Use devvault_ingest (single) or devvault_batch_ingest (bulk) to add new knowledge.",
+    "9. CHECK DUPLICATES — Before ingesting, use devvault_similar to check for existing similar modules.",
+    "10. TASK END — Call devvault_task_end with your task_id, status (success/failure/abandoned), and modules_used.",
   ],
 
   tool_catalog: {
@@ -62,12 +63,22 @@ const AGENT_GUIDE = {
         "(e.g. tags: ['evolution-api'] finds modules regardless of source_project). Call without params to list projects.",
       devvault_quickstart:
         "Returns a curated onboarding sequence for a specific domain.",
+      devvault_similar:
+        "Find modules similar to a given module (by embedding cosine similarity). " +
+        "Use for duplicate detection before ingest and for navigating related knowledge.",
+      devvault_stats:
+        "Returns aggregate vault metrics: total modules, by status/domain, modules without embeddings, recent activity.",
     },
     crud: {
       devvault_ingest:
         "Creates a new module. MUST include: title, code, language, why_it_matters, code_example.",
+      devvault_batch_ingest:
+        "Ingest up to 20 modules at once. Same schema as devvault_ingest but in array form. " +
+        "Use for mass content migration instead of looping devvault_ingest.",
       devvault_update:
-        "Updates an existing module's fields. Supports ai_metadata, tags, code, description, etc.",
+        "Updates an existing module's fields. Supports ai_metadata, tags, code, description, etc. " +
+        "NEW: Use append_tags, append_solves_problems, append_common_errors to ADD items " +
+        "to arrays without replacing them (avoids race conditions).",
       devvault_delete:
         "Permanently deletes a module by id. Ownership enforced.",
       devvault_validate:
@@ -146,7 +157,7 @@ export const registerBootstrapTool: ToolRegistrar = (server, client) => {
     description:
       "ALWAYS call this first. Returns the full index of the DevVault Knowledge Graph: " +
       "domains, playbook phases, published playbooks, top validated modules, AND a complete " +
-      "workflow guide explaining how to use all 25 tools effectively.",
+      "workflow guide explaining how to use all 28 tools effectively.",
     inputSchema: { type: "object", properties: {}, required: [] },
     handler: async () => {
       logger.info("invoked");
