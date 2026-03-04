@@ -1075,6 +1075,20 @@ export type Database = {
         Args: { p_layer?: number; p_scope?: string; p_scope_value?: string }
         Returns: Json
       }
+      get_tool_usage_ranking: {
+        Args: never
+        Returns: {
+          count: number
+          tool_name: string
+        }[]
+      }
+      get_top_searches: {
+        Args: { p_limit?: number }
+        Returns: {
+          count: number
+          query_text: string
+        }[]
+      }
       get_user_id_by_email: { Args: { p_email: string }; Returns: string }
       get_user_role: { Args: { _user_id: string }; Returns: string }
       get_vault_module: {
