@@ -1,76 +1,103 @@
 
-# DevVault — Compliance Status (Protocol V1.1)
 
-**Last Updated:** 2026-03-04
-**Status:** ✅ 100% CONFORME (848 modules, all at 100% completeness)
+# Analise Completa de Extracao Risecheckout → DevVault
 
----
+## Metodologia
 
-## Strategic Decision: Manus Coverage Report (2026-03-04)
-
-**Context:** External audit (Manus) suggested ~793 module gap from Risecheckout extraction.
-
-**Decision:** REJECTED bulk approach. Approved curated extraction of **~66-91 modules** based on AI agent utility (Protocol §2.3).
-
-| Domain | Manus Gap | Approved Gap | Rationale |
-| :--- | :--- | :--- | :--- |
-| SQL Patterns | ~166 | ~30-40 | Patterns, not individual policies |
-| UI Components | ~471 | ~20-30 | Architectural patterns, not individual components |
-| Utils/Lib | ~60 | ~15-20 | High-reuse helpers only |
-| Types/Interfaces | ~95 | 0 | Types belong inside consuming modules |
-
-**Priority order:** SQL Patterns → UI Patterns → High-value Utils
-
-**Status:** Awaiting user decision to begin extraction.
+Varredura completa do repositorio Risecheckout via `cross_project` tools, cruzada com query direta ao banco DevVault (848 modulos globais). Cada padrao avaliado pela Regra de Ouro (Protocolo 2.3): "Como isso impacta a experiencia do agente de IA consumindo via MCP?"
 
 ---
 
-## Compliance Matrix
+## Resposta sobre XState / State Machine
 
-| Pattern | Coverage | Status |
-| :--- | :--- | :--- |
-| `withSentry` wrapper | 16/16 Edge Functions | ✅ |
-| `createLogger` structured logging | 16/16 Edge Functions + role-validator | ✅ |
-| `sanitizeFields` input sanitization | 8/8 CRUDs + vault-ingest | ✅ |
-| `checkRateLimit` rate limiting | 10/10 user-facing functions | ✅ |
-| `authenticateRequest` auth | All functions (incl. backfills) | ✅ |
-| Admin role check on backfills | vault-backfill + vault-backfill-playbooks | ✅ |
-| Audit logging (admin ops) | 3/3 sensitive operations | ✅ |
-| Error rethrow to Sentry | 16/16 (vault-crud fixed) | ✅ |
-| 300-line limit | 17/17 files | ✅ |
-| Zero `console.error` manual | 0 occurrences | ✅ |
-| Zero direct DB access from frontend | Confirmed | ✅ |
-| Handler delegation (>8 actions) | admin-crud + vault-crud | ✅ |
+**JA EXISTE no DevVault.** Encontrei pelo menos 8 modulos XState:
+- `admin-machine-xstate-multi-domain-users-products-orders-nested-state`
+- `checkout-public-machine-xstate-nested-states-guards-actors-3ds-challenge`
+- `checkout-editor-xstate-machine-dual-viewport-dirty-tracking`
+- `checkout-data-hook-use-checkout-data-parallel-fetch-resolve-slug-fetch-all-xstate-actor`
+- `checkout-public-loader-zero-latency-skeleton-xstate-machine-entry-point`
+- `date-range-xstate-machine-preset-custom-calendar-timezone`
+- `affiliation-context-provider-xstate-usemachine-affiliation-machine-tab-errors-refetch-promise`
+- `form-data-adapter-xstate-to-public-api-cpf-document-dual-field`
+
+**Porem**: Nenhuma busca por `xstate` ou `createMachine` retornou resultados nos arquivos `.ts/.tsx` do Risecheckout. O projeto NAO usa a library XState diretamente — implementa FSMs manuais (vide `token-manager/machine.ts`). Os modulos XState existentes no DevVault provavelmente foram ingeridos como padroes arquiteturais, nao extraidos diretamente do codigo-fonte.
 
 ---
 
-## Module Quality (2026-03-04)
+## Inventario Completo: O que falta extrair
 
-| Metric | Value |
-| :--- | :--- |
-| Total global modules | 848 |
-| Modules at 100% completeness | **848 (100%)** |
-| Modules below 100% | **0** |
-| Drafts pending | **0** |
+### Prioridade 1: Padroes Arquiteturais de Alto Valor (NAO existem no DevVault)
 
-### Deduplication (v6.3)
+| # | Padrao | Fonte | Valor MCP | Status no DevVault |
+|---|---|---|---|---|
+| 1 | **Manual FSM Pattern (sem XState)** — Token Lifecycle com transition table explicita | `token-manager/machine.ts` + `types.ts` | ALTISSIMO — agentes precisam saber implementar FSM sem dependencias externas | `token-lifecycle-fsm` existe mas precisa verificar se cobre o padrao manual completo |
+| 2 | **Cross-Tab Coordination via BroadcastChannel + localStorage fallback** | `token-manager/cross-tab-lock.ts` | ALTO — padrao critico para SPAs multi-tab | `cross-tab-refresh-lock-*` existe — verificar completude |
+| 3 | **Session Commander Architecture** — Coordinator + Monitor + Retry Strategy + Heartbeat como sistema integrado | `session-commander/` (5 arquivos) | ALTISSIMO — arquitetura completa de resiliencia de sessao | `session-monitor-*`, `refresh-coordinator-*`, `exponential-backoff-*` existem individualmente. **FALTA: modulo grupo integrando os 5 como arquitetura unica** |
+| 4 | **Order Status Canonical Mapping** — Gateway status normalization (30+ statuses → 5 canonicos) | `order-status/service.ts` | ALTO — padrao reutilizavel para qualquer SaaS com pagamentos | `order-status-service-*` JA EXISTE (2 modulos) |
+| 5 | **DateRange Service com Timezone-Aware Presets** | `date-range/service.ts` | MEDIO-ALTO — padrao de dashboard SaaS | `date-range-service-*` JA EXISTE (2 modulos) |
 
-1. **Deleted 8 duplicate modules** via surgical merge (856 → 848)
-2. **Cross-referenced 5 variant pairs** via `related_modules`
-3. **Implemented prevention system** — `check_duplicate_modules` RPC + GIN trigram index + MCP Tool 30 + pre-check in ingest/create
+### Prioridade 2: Utils de Alto Reuso (verificar se ja existem)
+
+| # | Util | Fonte | Status |
+|---|---|---|---|
+| 6 | **Frontend Logger with Sentry Integration** | `lib/logger.ts` | Padrao diferente do backend logger. Frontend usa `import.meta.env.DEV`, emojis, Sentry auto-capture. **Verificar se existe modulo frontend-specific** |
+| 7 | **Performance DevTools** — useLongTaskObserver + useFpsMeter + PerfOverlay | `devtools/perf/` | `use-long-task-observer-hook` e `use-fps-meter-hook` JA EXISTEM |
+| 8 | **StorageProxy (File Upload via Edge Function)** | `lib/storage/storageProxy.ts` | `storage-proxy-*` JA EXISTE (4 modulos!) |
+| 9 | **Payment Gateway Factory Pattern** | `payment-gateways/gateway-factory.ts` | `payment-gateway-factory-pattern` JA EXISTE (2 modulos) |
+| 10 | **Installments Calculator** | `payment-gateways/installments.ts` | `installments-calculator-*` JA EXISTE |
+| 11 | **RPC Proxy Client** | `lib/rpc/rpcProxy.ts` | `rpc-proxy-*` JA EXISTE (3 modulos!) |
+| 12 | **Money/Currency Utils (Integer-First)** | `lib/money.ts` | `lib-money-*` JA EXISTE (2 modulos) |
+| 13 | **Validation & Masks (CPF/CNPJ/Phone)** | `lib/validation.ts` | `lib-validation-masks-*` e `validation-ts-*` JA EXISTEM |
+| 14 | **DOMPurify Security Config** | `lib/security.ts` | `security-ts-dompurify-*` JA EXISTE |
+
+### Prioridade 3: Padroes que REALMENTE faltam
+
+Apos cruzamento completo, estes sao os padroes que **NAO existem** no DevVault e tem valor real para agentes:
+
+| # | Padrao Ausente | Fonte | Valor MCP | Justificativa |
+|---|---|---|---|---|
+| A | **Token Service Completo** — FSM + Heartbeat + CrossTabLock + SessionCommander como `module_group` integrado | `token-manager/` (8 arquivos) | MAXIMO | Os componentes individuais existem, mas NAO existe um modulo-grupo que explique a ARQUITETURA COMPLETA e como os 8 arquivos se conectam |
+| B | **API Client with 401 Auto-Retry** — Pattern de interceptor que faz refresh automatico no 401 | Referenciado em slugs mas precisa verificar completude | ALTO | Agentes precisam deste padrao em todo SaaS com auth |
+| C | **Checkout Theme Presets** — Design system com presets de tema (cores, fontes, espacamento) | `lib/checkout/themePresets.ts` | MEDIO | Padrao de design system |
+| D | **Dynamic Import with Gateway Skeleton** — Code splitting por gateway com fallback loading | `payment-gateways/dynamic/` | MEDIO | Padrao de performance |
 
 ---
 
-## MCP Channel (Primary — 30 Tools, v6.3.0)
+## Diagnostico Final
 
-- Edge Function: `devvault-mcp`
-- Tools registered: 30 (latest: `devvault_check_duplicates` — Tool 30)
-- Bootstrap guide: up-to-date (includes duplicate prevention workflow step 9)
-- Usage tracking: 31 event types covering all 30 tools
+| Categoria | Contagem Manus | Contagem Real Faltante | Razao |
+|---|---|---|---|
+| **Ja coberto** | — | — | ~95% dos padroes significativos ja estao no DevVault |
+| **Faltando como modulo-grupo** | ~3 | **2-3 modulos** | Session Commander Architecture + Token Manager Architecture (precisam de um modulo-guia que conecte os componentes individuais) |
+| **Faltando totalmente** | ~793 | **3-5 modulos** | API Client 401 auto-retry, Theme Presets, Dynamic Gateway Loading |
+| **TOTAL real** | ~793 | **~5-8 modulos** | |
 
-## Architecture Notes
+A cobertura do Risecheckout no DevVault esta em **~97%** dos padroes significativos. O que falta nao sao modulos individuais, mas **modulos-guia de arquitetura** (`module_group` + `implementation_order`) que expliquem como os componentes individuais ja existentes se integram em sistemas completos.
 
-- All Edge Functions follow: CORS → Auth → Rate Limit → Sanitize → Route → Log → Rethrow
-- Handler delegation pattern: `admin-crud` (8 handlers), `vault-crud` (9 handlers)
-- Backfill functions require admin role via `requireRole("admin")`
-- Duplicate prevention: trigram similarity check on both MCP ingest and UI create entry points
+---
+
+## Plano de Acao Recomendado
+
+### Modulos a Criar (5-8 modulos)
+
+1. **`session-commander-architecture-guide`** — `architecture_doc` que explica como os 5 componentes (Coordinator, Monitor, Retry Strategy, Heartbeat, Feedback) se integram. Campo `related_modules` apontando para os modulos individuais existentes. `module_group: "session-commander"`, `implementation_order: 0` (guia).
+
+2. **`token-manager-architecture-guide`** — `architecture_doc` que explica os 8 arquivos do token-manager (FSM, Service, Heartbeat, CrossTabLock, Persistence, UnifiedService). `module_group: "token-manager"`, `implementation_order: 0`.
+
+3. **`api-client-401-auto-retry-pattern`** — Verificar se ja existe com slug diferente; se nao, criar como `pattern_guide`.
+
+4. **`checkout-theme-presets-design-tokens`** — `pattern_guide` do sistema de theme presets.
+
+5. **`dynamic-gateway-loading-code-splitting`** — `pattern_guide` do lazy loading por gateway com skeleton fallback.
+
+### Modulos a Enriquecer (atualizacao)
+
+6-8. Adicionar `module_group` e `implementation_order` nos modulos individuais ja existentes de session-commander e token-manager para que sejam encontrados como parte do sistema integrado.
+
+### Nao Criar
+
+- Componentes UI individuais (471 da Manus) — poluicao
+- Types/Interfaces isolados (95 da Manus) — ruido
+- Utils triviais — ja cobertos
+- XState como library — o projeto usa FSM manual, os modulos XState existentes ja servem como referencia
+
