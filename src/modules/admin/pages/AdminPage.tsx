@@ -47,6 +47,10 @@ export function AdminPage() {
         <TabsContent value="moderation">
           <GlobalModerationTab />
         </TabsContent>
+
+        <TabsContent value="mcpHealth">
+          <McpHealthTab />
+        </TabsContent>
       </Tabs>
     </div>
   );
