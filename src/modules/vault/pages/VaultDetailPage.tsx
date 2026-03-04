@@ -175,11 +175,14 @@ export function VaultDetailPage() {
         </div>
       )}
 
+      {/* Module Metadata (collapsible sections) */}
+      <ModuleMetadataSection module={mod} />
+
       {mod.context_markdown && (
         <div className="space-y-2">
           <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">{t("vault.whyAndHow")}</h2>
-          <div className="prose prose-sm dark:prose-invert max-w-none bg-surface p-4 rounded-lg border border-border">
-            <p className="text-foreground whitespace-pre-wrap">{mod.context_markdown}</p>
+          <div className="bg-surface p-4 rounded-lg border border-border">
+            <MarkdownRenderer content={mod.context_markdown} />
           </div>
         </div>
       )}
