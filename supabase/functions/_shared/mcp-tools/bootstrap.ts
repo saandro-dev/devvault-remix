@@ -129,6 +129,12 @@ const AGENT_GUIDE = {
         "Filter by scope (global/domain/project_type) and layer (1-6). " +
         "Hard-enforcement modules are BLOCKERS — soft-enforcement are warnings.",
     },
+    prevention: {
+      devvault_check_duplicates:
+        "Check if a module with a similar title already exists BEFORE ingesting. " +
+        "Returns matching modules ranked by similarity score. " +
+        "If matches found, use devvault_update on the existing module instead of creating a duplicate.",
+    },
   },
 
   behavioral_rules: [
