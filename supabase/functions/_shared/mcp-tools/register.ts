@@ -40,6 +40,7 @@ import { registerSimilarTool } from "./similar.ts";
 import { registerStatsTool } from "./stats.ts";
 import { registerMandatoryTool } from "./mandatory.ts";
 import { registerCheckDuplicatesTool } from "./check-duplicates.ts";
+import { registerGetVersionTool } from "./get-version.ts";
 
 export function registerAllTools(
   server: McpServerLike,
