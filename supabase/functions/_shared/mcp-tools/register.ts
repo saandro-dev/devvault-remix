@@ -4,7 +4,7 @@
  * Imports every tool registrar and calls them against the McpServer instance.
  * Adding a new tool = one import + one line in registerAllTools.
  *
- * Total tools: 30
+ * Total tools: 31
  */
 
 import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
