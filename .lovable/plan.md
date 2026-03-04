@@ -2,7 +2,7 @@
 # DevVault — Compliance Status (Protocol V1.1)
 
 **Last Updated:** 2026-03-04
-**Status:** ✅ 100% CONFORME (856 modules, all at 100% completeness)
+**Status:** ✅ 100% CONFORME (848 modules, all at 100% completeness)
 
 ---
 
@@ -29,29 +29,29 @@
 
 | Metric | Value |
 | :--- | :--- |
-| Total global modules | 856 |
-| Modules at 100% completeness | **856 (100%)** |
+| Total global modules | 848 |
+| Modules at 100% completeness | **848 (100%)** |
 | Modules below 100% | **0** |
 | Drafts pending | **0** |
 
-### Enrichment Actions Applied
+### Deduplication (v6.3)
 
-1. **Deleted** `teste-de-slug-simplificado` — test module with no real content
-2. **Enriched** `pushinpay-stats` — populated all 8 missing fields with real code from Risecheckout (code, why_it_matters, code_example, context_markdown, common_errors, test_code, solves_problems, database_schema)
-3. **Fixed** `get-vapid-public-key` — added database_schema documenting the `vault_get_secret` RPC usage
-4. **Improved** `vault_module_completeness` RPC — now uses intelligent code-pattern detection to determine if `database_schema` is required (checks for `.from(`, `.rpc(`, `.select(`, etc.), eliminating false positives for backend modules that don't interact with the database
+1. **Deleted 8 duplicate modules** via surgical merge (856 → 848)
+2. **Cross-referenced 5 variant pairs** via `related_modules`
+3. **Implemented prevention system** — `check_duplicate_modules` RPC + GIN trigram index + MCP Tool 30 + pre-check in ingest/create
 
 ---
 
-## MCP Channel (Primary — 29 Tools, v6.2.0)
+## MCP Channel (Primary — 30 Tools, v6.3.0)
 
 - Edge Function: `devvault-mcp`
-- Tools registered: 29 (latest: `devvault_mandatory` — Tool 29)
-- Bootstrap guide: up-to-date (includes mandatory workflow steps 1.5 and 10)
-- Usage tracking: 30 event types covering all 29 tools
+- Tools registered: 30 (latest: `devvault_check_duplicates` — Tool 30)
+- Bootstrap guide: up-to-date (includes duplicate prevention workflow step 9)
+- Usage tracking: 32 event types covering all 30 tools
 
 ## Architecture Notes
 
 - All Edge Functions follow: CORS → Auth → Rate Limit → Sanitize → Route → Log → Rethrow
 - Handler delegation pattern: `admin-crud` (8 handlers), `vault-crud` (9 handlers)
 - Backfill functions require admin role via `requireRole("admin")`
+- Duplicate prevention: trigram similarity check on both MCP ingest and UI create entry points
