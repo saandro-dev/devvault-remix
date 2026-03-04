@@ -39,6 +39,7 @@ import { registerTaskEndTool } from "./task-end.ts";
 import { registerSimilarTool } from "./similar.ts";
 import { registerStatsTool } from "./stats.ts";
 import { registerMandatoryTool } from "./mandatory.ts";
+import { registerCheckDuplicatesTool } from "./check-duplicates.ts";
 
 export function registerAllTools(
   server: McpServerLike,
