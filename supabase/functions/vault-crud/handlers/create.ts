@@ -2,10 +2,12 @@
  * vault-crud/handlers/create.ts — Handles the "create" action.
  *
  * Inserts a new vault module owned by the authenticated user.
+ * Includes pre-insert duplicate detection via trigram similarity.
  */
 
 import type { SupabaseClient, User } from "https://esm.sh/@supabase/supabase-js@2";
 import { createSuccessResponse, createErrorResponse, ERROR_CODES } from "../../_shared/api-helpers.ts";
+import { checkDuplicates } from "../../_shared/duplicate-checker.ts";
 import { createLogger } from "../../_shared/logger.ts";
 
 const log = createLogger("vault-crud:create");
@@ -21,9 +23,24 @@ export async function handleCreate(
     context_markdown, dependencies, tags, saas_phase, phase_title,
     why_it_matters, usage_hint, code_example, source_project,
     validation_status, related_modules, visibility, ai_metadata,
+    force_create,
   } = body;
 
   if (!title) return createErrorResponse(req, ERROR_CODES.VALIDATION_ERROR, "Missing title", 422);
+
+  // Pre-insert duplicate check (unless force_create is true)
+  if (!force_create) {
+    const dupResult = await checkDuplicates(client, title as string);
+    if (dupResult.has_duplicates) {
+      log.info("duplicate detected, blocking create", { title, matches: dupResult.matches.length });
+      return createSuccessResponse(req, {
+        blocked: true,
+        reason: "DUPLICATE_DETECTED",
+        duplicates: dupResult.matches,
+        hint: "Similar modules already exist. Set force_create: true to override.",
+      }, 409);
+    }
+  }
 
   const { data, error } = await client
     .from("vault_modules")
