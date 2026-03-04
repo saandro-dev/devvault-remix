@@ -6,6 +6,7 @@ import { RoleChangeDialog } from "../components/RoleChangeDialog";
 import { SystemHealthTab } from "../components/SystemHealthTab";
 import { ApiMonitorTab } from "../components/ApiMonitorTab";
 import { GlobalModerationTab } from "../components/GlobalModerationTab";
+import { McpHealthTab } from "../components/McpHealthTab";
 
 export function AdminPage() {
   const { t } = useTranslation();
