@@ -1,87 +1,95 @@
 
-# DevVault — Compliance Status (Protocol V1.1)
 
-**Last Updated:** 2026-03-04
-**Status:** ✅ 100% CONFORME (848 modules, all at 100% completeness)
+# DevVault — Oportunidades de Melhoria
 
----
-
-## Strategic Decision: Manus Coverage Report (2026-03-04)
-
-**Context:** External audit (Manus) suggested ~793 module gap from Risecheckout extraction.
-
-**Decision:** REJECTED bulk approach. Approved curated extraction of **~66-91 modules** based on AI agent utility (Protocol §2.3).
-
-| Domain | Manus Gap | Approved Gap | Rationale |
-| :--- | :--- | :--- | :--- |
-| SQL Patterns | ~166 | ~30-40 | Patterns, not individual policies |
-| UI Components | ~471 | ~20-30 | Architectural patterns, not individual components |
-| Utils/Lib | ~60 | ~15-20 | High-reuse helpers only |
-| Types/Interfaces | ~95 | 0 | Types belong inside consuming modules |
-
-**Priority order:** SQL Patterns → UI Patterns → High-value Utils
-
-**Status:** Awaiting user decision to begin extraction.
+Apos analise completa do codebase (frontend, backend, schema, UI), identifiquei melhorias organizadas por impacto.
 
 ---
 
-## Compliance Matrix
+## 1. Canal Primario (MCP / Agentes) — Impacto MAXIMO
 
-| Pattern | Coverage | Status |
-| :--- | :--- | :--- |
-| `withSentry` wrapper | 16/16 Edge Functions | ✅ |
-| `createLogger` structured logging | 16/16 Edge Functions + role-validator | ✅ |
-| `sanitizeFields` input sanitization | 8/8 CRUDs + vault-ingest | ✅ |
-| `checkRateLimit` rate limiting | 10/10 user-facing functions | ✅ |
-| `authenticateRequest` auth | All functions (incl. backfills) | ✅ |
-| Admin role check on backfills | vault-backfill + vault-backfill-playbooks | ✅ |
-| Audit logging (admin ops) | 3/3 sensitive operations | ✅ |
-| Error rethrow to Sentry | 16/16 (vault-crud fixed) | ✅ |
-| 300-line limit | 17/17 files | ✅ |
-| Zero `console.error` manual | 0 occurrences | ✅ |
-| Zero direct DB access from frontend | Confirmed | ✅ |
-| Handler delegation (>8 actions) | admin-crud + vault-crud | ✅ |
+### 1A. Playbooks Compostos
+O sistema de `vault_playbooks` existe no banco (tabela + RLS + modulos), mas **nao tem nenhuma Edge Function nem MCP tool** para criar/consumir playbooks. Um agente hoje nao consegue pedir "me de o playbook completo para implementar auth resilience".
 
----
+**Acao:** Criar MCP tool `devvault_get_playbook_composed` que retorna uma sequencia ordenada de modulos com `implementation_order`, `module_group` e dependencias resolvidas — um roteiro completo de implementacao.
 
-## Module Quality (2026-03-04)
+### 1B. Semantic Search (Vector)
+Os embeddings existem (coluna `embedding` na tabela, backfill strategy), mas a busca MCP (`devvault_search`) usa apenas `tsvector` full-text search. **Nao existe busca semantica por similaridade vetorial.** Um agente que busca "como lidar com sessao expirada" pode nao encontrar modulos cujo titulo e "refresh-coordinator".
 
-| Metric | Value |
-| :--- | :--- |
-| Total global modules | 850 |
-| Modules at 100% completeness | **850 (100%)** |
-| Modules below 100% | **0** |
-| Drafts pending | **0** |
+**Acao:** Adicionar busca hibrida (tsvector + cosine similarity) na tool `devvault_search`, usando `pgvector` `<=>` operator.
 
-### Architecture Guides (2026-03-04)
+### 1C. Versionamento de Modulos
+Modulos tem campo `version` (text) e tabela `vault_module_changelog`, mas nao existe mecanismo para manter versoes anteriores do codigo. Se um modulo e atualizado, o codigo anterior se perde.
 
-Created 2 new `architecture_doc` modules as system integration guides:
-
-1. **`session-commander-architecture-guide`** — Explains how 5 components (Coordinator, SessionMonitor, RetryStrategy, Feedback, Types) integrate. `module_group: "session-commander"`, `implementation_order: 0`.
-2. **`token-manager-architecture-guide`** — Explains how 8 components (FSM, Service, UnifiedService, Heartbeat, CrossTabLock, Persistence, Types, barrel) integrate. `module_group: "token-manager"`, `implementation_order: 0`.
-
-Updated 5 existing modules with consistent `module_group` and `related_modules` back-references to their respective architecture guides.
-
-Cross-linked both architecture guides to each other via `related_modules`.
-
-### Deduplication (v6.3)
-
-1. **Deleted 8 duplicate modules** via surgical merge (856 → 848)
-2. **Cross-referenced 5 variant pairs** via `related_modules`
-3. **Implemented prevention system** — `check_duplicate_modules` RPC + GIN trigram index + MCP Tool 30 + pre-check in ingest/create
+**Acao:** Criar tabela `vault_module_versions` que armazena snapshots do `code` + `context_markdown` a cada update, com MCP tool para buscar versao especifica.
 
 ---
 
-## MCP Channel (Primary — 30 Tools, v6.3.0)
+## 2. Canal Secundario (UI Web) — Impacto ALTO
 
-- Edge Function: `devvault-mcp`
-- Tools registered: 30 (latest: `devvault_check_duplicates` — Tool 30)
-- Bootstrap guide: up-to-date (includes duplicate prevention workflow step 9)
-- Usage tracking: 31 event types covering all 30 tools
+### 2A. Markdown Rendering
+O `context_markdown` e exibido como texto puro (`whitespace-pre-wrap`) no `VaultDetailPage`. Nao renderiza headings, listas, code blocks, nem links. Com 850 modulos contendo context_markdown rico, isso e uma perda significativa de usabilidade.
 
-## Architecture Notes
+**Acao:** Integrar `react-markdown` + `rehype-highlight` para renderizar markdown real.
 
-- All Edge Functions follow: CORS → Auth → Rate Limit → Sanitize → Route → Log → Rethrow
-- Handler delegation pattern: `admin-crud` (8 handlers), `vault-crud` (9 handlers)
-- Backfill functions require admin role via `requireRole("admin")`
-- Duplicate prevention: trigram similarity check on both MCP ingest and UI create entry points
+### 2B. Dashboard Analytics para MCP
+O dashboard mostra apenas contadores basicos (projetos, modulos, keys, bugs). Nao mostra **nenhuma metrica do canal primario**: quais tools MCP sao mais usadas, quais modulos sao mais buscados, knowledge gaps abertos, taxa de sucesso dos agentes.
+
+**Acao:** Criar dashboard cards com dados de `vault_usage_events`, `vault_knowledge_gaps`, e `vault_agent_tasks`.
+
+### 2C. Vault Detail — Campos Invisíveis
+O `VaultDetailPage` nao exibe: `common_errors`, `solves_problems`, `test_code`, `database_schema`, `why_it_matters`, `usage_hint`, `difficulty`, `estimated_minutes`, `module_group`, `implementation_order`, `version`, `related_modules`. Esses campos existem no banco e sao preenchidos em 100% dos modulos, mas o curador humano nao consegue ve-los na UI.
+
+**Acao:** Adicionar secoes colapsaveis para todos os campos ausentes.
+
+### 2D. Vault List — Filtros Avancados
+A listagem so filtra por domain e texto. Faltam filtros por: `module_type`, `validation_status`, `module_group`, `difficulty`, `language`, `has_test_code`.
+
+**Acao:** Adicionar painel de filtros avancados.
+
+---
+
+## 3. Infraestrutura & Seguranca — Impacto MEDIO-ALTO
+
+### 3A. Observabilidade MCP
+Nao existe um painel de "saude do MCP" — latencia media por tool, taxa de erro, top queries sem resultado (knowledge gaps). Os dados estao em `vault_usage_events` e `vault_knowledge_gaps` mas nao sao visualizados.
+
+**Acao:** Criar tab "MCP Health" no Admin com graficos (recharts) de uso, latencia, e gaps.
+
+### 3B. Testes Automatizados
+O projeto tem apenas `src/test/example.test.ts`. Zero testes reais para hooks, edge functions, ou logica de negocio.
+
+**Acao:** Criar suite de testes para os hooks criticos (`useVaultModules`, `usePermissions`) e unit tests para logica compartilhada (`input-sanitizer`, `rate-limit-guard`).
+
+### 3C. Error Boundary Global
+Nao existe error boundary no React. Um erro em qualquer componente derruba toda a aplicacao.
+
+**Acao:** Criar `ErrorBoundary` component com fallback UI e integracao Sentry.
+
+---
+
+## 4. Qualidade de Codigo
+
+### 4A. SearchPage acessa Supabase diretamente
+`SearchPage.tsx` faz `supabase.functions.invoke("global-search", ...)` diretamente — correto por ser Edge Function. Mas usa `useCallback` com dependencia em `toast` e `t`, o que pode causar re-renders desnecessarios.
+
+### 4B. SettingsPage acessa Storage diretamente
+`SettingsPage.tsx` faz `supabase.storage.from("avatars").upload(...)` — acesso direto ao storage, sem passar por Edge Function. Viola a regra 5.5 do protocolo (Zero Database Access from Frontend). Storage e diferente de database, mas o espirito da regra e centralizar I/O.
+
+---
+
+## Priorizacao Recomendada (Protocolo 2.3 — Agente Primeiro)
+
+| Prioridade | Melhoria | Impacto MCP |
+|---|---|---|
+| 1 | Semantic Search hibrida (1B) | MAXIMO — agentes encontram modulos por intencao |
+| 2 | Playbooks compostos via MCP (1A) | MAXIMO — roteiros de implementacao completos |
+| 3 | Markdown rendering na UI (2A) | ALTO — curadores conseguem validar conteudo |
+| 4 | Dashboard MCP analytics (2B) | ALTO — visibilidade do canal primario |
+| 5 | Vault Detail campos completos (2C) | ALTO — curadoria efetiva |
+| 6 | MCP Health admin tab (3A) | MEDIO — observabilidade |
+| 7 | Error Boundary (3C) | MEDIO — estabilidade |
+| 8 | Filtros avancados vault (2D) | MEDIO — produtividade curador |
+| 9 | Versionamento de modulos (1C) | MEDIO — historico |
+| 10 | Testes automatizados (3B) | MEDIO — confiabilidade |
+
