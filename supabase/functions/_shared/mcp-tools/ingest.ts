@@ -8,6 +8,7 @@
 import { createLogger } from "../logger.ts";
 import { batchInsertDependencies } from "../dependency-helpers.ts";
 import { updateModuleEmbedding } from "../embedding-client.ts";
+import { checkDuplicates } from "../duplicate-checker.ts";
 import { getCompleteness } from "./completeness.ts";
 import { trackUsage } from "./usage-tracker.ts";
 import { errorResponse, classifyRpcError } from "./error-helpers.ts";
