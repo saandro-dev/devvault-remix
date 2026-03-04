@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createBrowserRouter, RouterProvider } from "react-router-dom";
 import { ThemeProvider } from "@/providers/theme";
 import { AuthProvider } from "@/modules/auth/providers/AuthProvider";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { appRoutes } from "@/routes/appRoutes";
 
 const queryClient = new QueryClient({
