@@ -696,6 +696,65 @@ export type Database = {
           },
         ]
       }
+      vault_module_versions: {
+        Row: {
+          ai_metadata: Json
+          change_summary: string | null
+          code: string
+          code_example: string | null
+          common_errors: Json | null
+          context_markdown: string | null
+          created_at: string
+          created_by: string
+          database_schema: string | null
+          id: string
+          module_id: string
+          solves_problems: string[] | null
+          test_code: string | null
+          version: string
+        }
+        Insert: {
+          ai_metadata?: Json
+          change_summary?: string | null
+          code: string
+          code_example?: string | null
+          common_errors?: Json | null
+          context_markdown?: string | null
+          created_at?: string
+          created_by: string
+          database_schema?: string | null
+          id?: string
+          module_id: string
+          solves_problems?: string[] | null
+          test_code?: string | null
+          version: string
+        }
+        Update: {
+          ai_metadata?: Json
+          change_summary?: string | null
+          code?: string
+          code_example?: string | null
+          common_errors?: Json | null
+          context_markdown?: string | null
+          created_at?: string
+          created_by?: string
+          database_schema?: string | null
+          id?: string
+          module_id?: string
+          solves_problems?: string[] | null
+          test_code?: string | null
+          version?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vault_module_versions_module_id_fkey"
+            columns: ["module_id"]
+            isOneToOne: false
+            referencedRelation: "vault_modules"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       vault_modules: {
         Row: {
           ai_metadata: Json
