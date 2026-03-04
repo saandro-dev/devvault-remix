@@ -57,7 +57,7 @@ Performed a complete duplicate audit across 856 global modules, identified and e
 - **devvault_ingest:** Now performs automatic duplicate check before insertion. If similar modules found (similarity > 0.65), returns `blocked: true` with `_duplicate_warning` listing matches. Use `force_create: true` to override. Prevents future duplicate accumulation at the source.
 - **vault-crud create:** Same duplicate pre-check integrated for UI-based module creation. Returns HTTP 409 with matches if duplicates found.
 - **devvault_bootstrap:** Updated AGENT_GUIDE to 30 tools. Added `prevention` tool category with `devvault_check_duplicates`. Updated workflow step 9 to use `devvault_check_duplicates`. Added behavioral rule and anti-pattern for duplicate prevention.
-- **usage-tracker:** Added event type `check_duplicates` (total: 32 event types covering all 30 tools).
+- **usage-tracker:** Added event type `check_duplicates` (total: 31 event types covering all 30 tools).
 
 ### Architectural Impact
 - **Preventive, not reactive:** Duplicates are blocked at BOTH entry points (MCP ingest + UI create) before they enter the database.

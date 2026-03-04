@@ -47,7 +47,7 @@
 - Edge Function: `devvault-mcp`
 - Tools registered: 30 (latest: `devvault_check_duplicates` — Tool 30)
 - Bootstrap guide: up-to-date (includes duplicate prevention workflow step 9)
-- Usage tracking: 32 event types covering all 30 tools
+- Usage tracking: 31 event types covering all 30 tools
 
 ## Architecture Notes
 
