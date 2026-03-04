@@ -77,4 +77,5 @@ export function registerAllTools(
   registerStatsTool(server, client, auth);
   registerMandatoryTool(server, client, auth);
   registerCheckDuplicatesTool(server, client, auth);
+  registerGetVersionTool(server, client, auth);
 }
