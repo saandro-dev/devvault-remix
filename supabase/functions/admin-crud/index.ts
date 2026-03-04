@@ -10,6 +10,7 @@
  *   - admin-revoke-api-key: Force-revoke any user's API key (owner only)
  *   - list-global-modules:  All modules with visibility = 'global' (admin+)
  *   - unpublish-module:     Set module visibility back to 'private' (admin+)
+ *   - mcp-health:           MCP tool usage analytics and knowledge gaps (admin+)
  *
  * Architecture: Modular handler delegation pattern.
  * Each action is handled by a dedicated module in ./handlers/.
