@@ -96,6 +96,8 @@ export const registerIngestTool: ToolRegistrar = (server, client, auth) => {
           description: "Array of module dependencies. Use 'depends_on' with UUID or slug.",
         },
       },
+        force_create: { type: "boolean", description: "Set to true to skip duplicate check and force creation (default: false)" },
+      },
       required: ["title", "code"],
     },
     handler: async (params: Record<string, unknown>) => {
