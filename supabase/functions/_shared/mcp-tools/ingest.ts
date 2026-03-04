@@ -8,6 +8,7 @@
 import { createLogger } from "../logger.ts";
 import { batchInsertDependencies } from "../dependency-helpers.ts";
 import { updateModuleEmbedding } from "../embedding-client.ts";
+import { checkDuplicates } from "../duplicate-checker.ts";
 import { getCompleteness } from "./completeness.ts";
 import { trackUsage } from "./usage-tracker.ts";
 import { errorResponse, classifyRpcError } from "./error-helpers.ts";
@@ -95,6 +96,8 @@ export const registerIngestTool: ToolRegistrar = (server, client, auth) => {
           description: "Array of module dependencies. Use 'depends_on' with UUID or slug.",
         },
       },
+        force_create: { type: "boolean", description: "Set to true to skip duplicate check and force creation (default: false)" },
+      },
       required: ["title", "code"],
     },
     handler: async (params: Record<string, unknown>) => {
@@ -102,6 +105,33 @@ export const registerIngestTool: ToolRegistrar = (server, client, auth) => {
       if (!params.why_it_matters) warnings.push("why_it_matters is empty — agents benefit greatly from knowing WHY this module exists.");
       if (!params.code_example) warnings.push("code_example is empty — agents need usage examples to implement correctly.");
       if (!params.usage_hint) warnings.push("usage_hint is empty — agents need to know WHEN to use this module.");
+
+      // Pre-insert duplicate check (unless force_create is true)
+      if (!params.force_create) {
+        const dupResult = await checkDuplicates(client, params.title as string);
+        if (dupResult.has_duplicates) {
+          trackUsage(client, auth, {
+            event_type: "check_duplicates",
+            tool_name: "devvault_ingest",
+            query_text: params.title as string,
+            result_count: dupResult.matches.length,
+          });
+          return {
+            content: [{
+              type: "text",
+              text: JSON.stringify({
+                blocked: true,
+                reason: "DUPLICATE_DETECTED",
+                _duplicate_warning: dupResult.matches,
+                _hint:
+                  `⚠️ Found ${dupResult.matches.length} module(s) with similar titles. ` +
+                  "Review the matches above. If this is genuinely NEW content, re-call devvault_ingest " +
+                  "with force_create: true. If updating existing content, use devvault_update instead.",
+              }, null, 2),
+            }],
+          };
+        }
+      }
 
       const insertData: Record<string, unknown> = {
         title: params.title,

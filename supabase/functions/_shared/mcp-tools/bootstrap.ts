@@ -7,7 +7,7 @@
  *
  * This is the ONLY entry point an AI agent needs — no external docs required.
  *
- * Tools: 29 total.
+ * Tools: 30 total.
  */
 
 import { createLogger } from "../logger.ts";
@@ -22,10 +22,11 @@ const logger = createLogger("mcp-tool:bootstrap");
 
 const AGENT_GUIDE = {
   _purpose:
-    "This guide teaches AI agents how to use DevVault's 29 MCP tools effectively. " +
+    "This guide teaches AI agents how to use DevVault's 30 MCP tools effectively. " +
     "Read it once after bootstrap, then follow the workflow. " +
     "CRITICAL: When debugging errors, ALWAYS consult devvault_diagnose BEFORE manual fixes. " +
-    "CRITICAL: Before starting any new project, call devvault_mandatory to understand required foundation modules.",
+    "CRITICAL: Before starting any new project, call devvault_mandatory to understand required foundation modules. " +
+    "CRITICAL: Before ingesting, call devvault_check_duplicates to avoid creating duplicate modules.",
 
   recommended_workflow: [
     "0. TASK START — Call devvault_task_start with your objective to begin tracking this work session.",
@@ -38,7 +39,7 @@ const AGENT_GUIDE = {
     "6. IMPLEMENT — Apply the code. If you encounter problems, use devvault_diagnose or devvault_diary_bug.",
     "7. REPORT OUTCOME — Use devvault_report_success on success, or devvault_diary_bug on failure.",
     "8. CONTRIBUTE BACK — Use devvault_ingest (single) or devvault_batch_ingest (bulk) to add new knowledge.",
-    "9. CHECK DUPLICATES — Before ingesting, use devvault_similar to check for existing similar modules.",
+    "9. CHECK DUPLICATES — Before ingesting, call devvault_check_duplicates with the title to verify no similar module exists. If duplicates found, use devvault_update instead.",
     "10. TASK END — Call devvault_task_end with your task_id, status (success/failure/abandoned), and modules_used. Use check_compliance param in devvault_mandatory to verify all mandatory modules were implemented.",
   ],
 
@@ -128,6 +129,12 @@ const AGENT_GUIDE = {
         "Filter by scope (global/domain/project_type) and layer (1-6). " +
         "Hard-enforcement modules are BLOCKERS — soft-enforcement are warnings.",
     },
+    prevention: {
+      devvault_check_duplicates:
+        "Check if a module with a similar title already exists BEFORE ingesting. " +
+        "Returns matching modules ranked by similarity score. " +
+        "If matches found, use devvault_update on the existing module instead of creating a duplicate.",
+    },
   },
 
   behavioral_rules: [
@@ -145,6 +152,7 @@ const AGENT_GUIDE = {
     "Prefer devvault_search over devvault_list when you know what problem you're solving.",
     "Prefer devvault_list over devvault_search when browsing a domain or exploring available knowledge.",
     "When a module has context_markdown, ALWAYS read it — it contains critical architecture decisions.",
+    "When ingesting new modules, ALWAYS call devvault_check_duplicates first — duplicates waste agent time and degrade search quality.",
     "When ingesting new modules, include why_it_matters and code_example — modules without these are considered incomplete.",
     "Use devvault_load_context with 'tags' parameter to find modules across projects (e.g. tags: ['evolution-api'] finds all Evolution API modules regardless of source_project).",
     "When ingesting or updating backend, architecture, or security modules that interact with a database, you MUST include the real database_schema DDL from the source project. Do NOT fabricate or guess schemas — extract the actual CREATE TABLE, CREATE POLICY, CREATE FUNCTION statements from the source project's migration files or database.",
@@ -154,7 +162,7 @@ const AGENT_GUIDE = {
     "Do NOT ingest modules without why_it_matters and code_example — they will fail validation.",
     "Do NOT implement a module without first fetching its dependencies — you will miss required context.",
     "Do NOT skip devvault_diagnose when encountering errors — the knowledge base likely has a solution.",
-    "Do NOT create duplicate modules — always search first to check if similar knowledge exists.",
+    "Do NOT create duplicate modules — always call devvault_check_duplicates first. If duplicates are found, use devvault_update to enrich the existing module.",
     "Do NOT ignore _hint and _instructions fields in tool responses — they guide your next action.",
     "Do NOT use devvault_report_bug for user project bugs — use devvault_diary_bug instead.",
     "Do NOT forget to call devvault_task_end — abandoned tasks without closure pollute analytics.",
@@ -168,7 +176,7 @@ export const registerBootstrapTool: ToolRegistrar = (server, client) => {
     description:
       "ALWAYS call this first. Returns the full index of the DevVault Knowledge Graph: " +
       "domains, playbook phases, published playbooks, top validated modules, AND a complete " +
-      "workflow guide explaining how to use all 29 tools effectively. " +
+      "workflow guide explaining how to use all 30 tools effectively. " +
       "After bootstrap, call devvault_mandatory to check required foundation modules.",
     inputSchema: { type: "object", properties: {}, required: [] },
     handler: async () => {

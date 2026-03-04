@@ -962,6 +962,17 @@ export type Database = {
     }
     Functions: {
       bootstrap_vault_context: { Args: never; Returns: Json }
+      check_duplicate_modules: {
+        Args: { p_limit?: number; p_threshold?: number; p_title: string }
+        Returns: {
+          domain: string
+          id: string
+          module_type: string
+          similarity_score: number
+          slug: string
+          title: string
+        }[]
+      }
       create_devvault_api_key: {
         Args: { p_key_name: string; p_raw_key: string; p_user_id: string }
         Returns: string

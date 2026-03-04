@@ -50,7 +50,10 @@ type UsageEventType =
   | "task_end"
   // Analytics
   | "similar"
-  | "stats";
+  | "stats"
+  // Compliance & Prevention
+  | "mandatory"
+  | "check_duplicates";
 
 interface UsageEvent {
   event_type: UsageEventType;

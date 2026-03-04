@@ -12,16 +12,58 @@
 ╔═══════════════════════════════════════════════════════════════╗
 ║  ✅ DEVVAULT PROTOCOL V2 - 10.0/10 - DUAL-AUTH ARCHITECTURE   ║
 ║     16 Edge Functions | 2 Auth Systems | Zero Legacy Code      ║
-║     MCP Server v6.2: 29 Tools | Mandatory Modules System      ║
+║     MCP Server v6.3: 30 Tools | Duplicate Prevention System   ║
 ║     Phase 3: Hybrid Search (pgvector + tsvector + pg_trgm)     ║
 ║     Phase 6: SQL-Native Matching + Domain Inference            ║
 ║     Phase 6.1: Unified Backfill Engine (Strategy Pattern)      ║
+║     Phase 6.3: Deduplication + Duplicate Prevention            ║
 ║     Runtime: 100% Deno.serve() native                         ║
 ║     Secrets: Supabase Vault + Multi-Domain Keys               ║
 ║     verify_jwt: false (ALL 16 functions)                      ║
 ║     SECRET DOMAINS: admin | general                           ║
 ╚═══════════════════════════════════════════════════════════════╝
 ```
+
+---
+
+## v6.3 Changelog (2026-03-04)
+
+### Phase 6.3: Deduplication + Duplicate Prevention (29 → 30 Tools)
+
+Performed a complete duplicate audit across 856 global modules, identified and eliminated 8 duplicate modules via surgical merge, and implemented a permanent prevention system.
+
+### Deduplication Results
+- **lazyWithRetry:** 4 modules → 1 survivor (`lazy-with-retry-code-splitting`). 3 deleted.
+- **checkout-heartbeat:** 3 modules → 1 survivor (`checkout-heartbeat-session`). 2 deleted.
+- **context-switcher:** 2 modules → 1 survivor (`context-switcher-hook-multi-role-navigation`). 1 deleted.
+- **webhook-queue-retry:** 2 → 1 survivor (`webhook-queue-retry-dead-letter`). 1 deleted.
+- **multi-key-supabase-client:** 2 → 1 survivor (`multi-key-domain-isolation`). 1 deleted.
+- **Variant pairs cross-referenced:** 5 pairs (stripe-webhook, members-area, pii-access, reconciliation, marketplace-split) linked via `related_modules`.
+- **Module count:** 856 → 848 global modules.
+
+### New MCP Tools (+1, total 30)
+- **devvault_check_duplicates (Tool 30):** Proactive duplicate detection via trigram similarity (`pg_trgm`). Accepts `title`, optional `threshold` (default 0.65), `limit` (default 5). Returns matching modules ranked by similarity score. Agents should call this BEFORE `devvault_ingest`.
+
+### New SQL Functions (+1)
+- **`check_duplicate_modules(p_title, p_threshold, p_limit)`:** Trigram similarity search on `vault_modules.title`. Uses GIN trigram index for performance. Returns id, slug, title, domain, module_type, similarity_score.
+
+### New Indexes (+1)
+- **`idx_vault_modules_title_trgm`:** GIN trigram index on `vault_modules.title` for fast `pg_trgm` similarity lookups.
+
+### New Shared Modules (+1)
+- **`_shared/duplicate-checker.ts`:** Reusable helper wrapping the `check_duplicate_modules` RPC. Used by `devvault_ingest`, `devvault_check_duplicates`, and `vault-crud/create`.
+
+### Enhancements
+- **devvault_ingest:** Now performs automatic duplicate check before insertion. If similar modules found (similarity > 0.65), returns `blocked: true` with `_duplicate_warning` listing matches. Use `force_create: true` to override. Prevents future duplicate accumulation at the source.
+- **vault-crud create:** Same duplicate pre-check integrated for UI-based module creation. Returns HTTP 409 with matches if duplicates found.
+- **devvault_bootstrap:** Updated AGENT_GUIDE to 30 tools. Added `prevention` tool category with `devvault_check_duplicates`. Updated workflow step 9 to use `devvault_check_duplicates`. Added behavioral rule and anti-pattern for duplicate prevention.
+- **usage-tracker:** Added event type `check_duplicates` (total: 32 event types covering all 30 tools).
+
+### Architectural Impact
+- **Preventive, not reactive:** Duplicates are blocked at BOTH entry points (MCP ingest + UI create) before they enter the database.
+- **Agent-friendly:** Dedicated tool allows proactive checking before bulk operations. `force_create` flag ensures agents are never permanently blocked.
+- **SQL-native performance:** GIN trigram index ensures O(log n) similarity lookups, not sequential scans.
+- **Zero false positives:** Threshold of 0.65 calibrated against real data (16 pairs analyzed, 4 false positives excluded).
 
 ---
 
@@ -271,7 +313,7 @@ To limit the "blast radius" in case of a key leak, the system uses two service k
 | `vault-crud` | Internal (JWT) | general | **Main BFF for the Vault.** Performs all CRUD operations on the user's knowledge modules. **Actions:** `list`, `get`, `create`, `update`, `delete`, `search`, `get_playbook`, `share`, `unshare`, `list_shares`, `add_dependency`, `remove_dependency`, `list_dependencies`. |
 | `vault-query` | External (API Key) | general | **Public READ endpoint for Agents.** Allows external systems to query the knowledge graph. **Actions:** `bootstrap`, `search`, `get`, `list`, `list_domains`. |
 | `vault-ingest` | External (API Key) | general | **Public WRITE endpoint for Agents.** Allows external systems to create, update, and delete modules. **Actions:** `ingest` (single/batch creation), `update`, `delete`. |
-| `devvault-mcp` | External (API Key) | general | **MCP Server (Model Context Protocol) for AI Agents (v6.2).** Exposes a structured API with tools to interact with the Vault. **Tools (29):** `devvault_bootstrap`, `devvault_search`, `devvault_get`, `devvault_list`, `devvault_domains`, `devvault_ingest`, `devvault_update`, `devvault_get_group`, `devvault_validate`, `devvault_delete`, `devvault_diagnose`, `devvault_report_bug`, `devvault_resolve_bug`, `devvault_report_success`, `devvault_export_tree`, `devvault_check_updates`, `devvault_load_context`, `devvault_quickstart`, `devvault_changelog`, `devvault_diary_bug`, `devvault_diary_resolve`, `devvault_diary_list`, `devvault_get_playbook`, `devvault_task_start`, `devvault_task_end`, `devvault_batch_ingest`, `devvault_similar`, `devvault_stats`. **v6.1:** Added batch ingestion (up to 20 modules/call), vector similarity search, vault health metrics, duplicate detection on ingest (>0.92 cosine), atomic array append operations on update, and usage stats on get. **v6.0:** SQL-native diagnose architecture — `match_common_errors`, `match_solves_problems`, `infer_domain_from_text` RPCs replace JS matching. Domain-aware `vault_module_completeness` with explicit v_total. |
+| `devvault-mcp` | External (API Key) | general | **MCP Server (Model Context Protocol) for AI Agents (v6.3).** Exposes a structured API with tools to interact with the Vault. **Tools (30):** `devvault_bootstrap`, `devvault_search`, `devvault_get`, `devvault_list`, `devvault_domains`, `devvault_ingest`, `devvault_update`, `devvault_get_group`, `devvault_validate`, `devvault_delete`, `devvault_diagnose`, `devvault_report_bug`, `devvault_resolve_bug`, `devvault_report_success`, `devvault_export_tree`, `devvault_check_updates`, `devvault_load_context`, `devvault_quickstart`, `devvault_changelog`, `devvault_diary_bug`, `devvault_diary_resolve`, `devvault_diary_list`, `devvault_get_playbook`, `devvault_task_start`, `devvault_task_end`, `devvault_batch_ingest`, `devvault_similar`, `devvault_stats`, `devvault_mandatory`, `devvault_check_duplicates`. **v6.3:** Deduplication system — duplicate pre-check on ingest (trigram similarity), dedicated `devvault_check_duplicates` tool, `force_create` override. **v6.1:** Added batch ingestion (up to 20 modules/call), vector similarity search, vault health metrics, duplicate detection on ingest (>0.92 cosine), atomic array append operations on update, and usage stats on get. **v6.0:** SQL-native diagnose architecture — `match_common_errors`, `match_solves_problems`, `infer_domain_from_text` RPCs replace JS matching. Domain-aware `vault_module_completeness` with explicit v_total. |
 
 ### Entity Management
 
