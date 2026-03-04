@@ -39,7 +39,7 @@ const AGENT_GUIDE = {
     "6. IMPLEMENT — Apply the code. If you encounter problems, use devvault_diagnose or devvault_diary_bug.",
     "7. REPORT OUTCOME — Use devvault_report_success on success, or devvault_diary_bug on failure.",
     "8. CONTRIBUTE BACK — Use devvault_ingest (single) or devvault_batch_ingest (bulk) to add new knowledge.",
-    "9. CHECK DUPLICATES — Before ingesting, use devvault_similar to check for existing similar modules.",
+    "9. CHECK DUPLICATES — Before ingesting, call devvault_check_duplicates with the title to verify no similar module exists. If duplicates found, use devvault_update instead.",
     "10. TASK END — Call devvault_task_end with your task_id, status (success/failure/abandoned), and modules_used. Use check_compliance param in devvault_mandatory to verify all mandatory modules were implemented.",
   ],
 
