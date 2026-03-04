@@ -58,7 +58,7 @@ function withCors(response: Response): Response {
 const client = getSupabaseClient("general");
 const mcp = new McpServer({
   name: "devvault",
-  version: "6.2.0",
+  version: "6.3.0",
   logger: {
     error: (...args: unknown[]) => console.error("[MCP:LIB]", ...args),
     warn: (...args: unknown[]) => console.warn("[MCP:LIB]", ...args),

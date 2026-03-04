@@ -176,7 +176,7 @@ export const registerBootstrapTool: ToolRegistrar = (server, client) => {
     description:
       "ALWAYS call this first. Returns the full index of the DevVault Knowledge Graph: " +
       "domains, playbook phases, published playbooks, top validated modules, AND a complete " +
-      "workflow guide explaining how to use all 29 tools effectively. " +
+      "workflow guide explaining how to use all 30 tools effectively. " +
       "After bootstrap, call devvault_mandatory to check required foundation modules.",
     inputSchema: { type: "object", properties: {}, required: [] },
     handler: async () => {
