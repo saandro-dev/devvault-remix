@@ -38,6 +38,7 @@ import { handleListApiKeys } from "./handlers/list-api-keys.ts";
 import { handleAdminRevokeApiKey } from "./handlers/admin-revoke-api-key.ts";
 import { handleListGlobalModules } from "./handlers/list-global-modules.ts";
 import { handleUnpublishModule } from "./handlers/unpublish-module.ts";
+import { handleMcpHealth } from "./handlers/mcp-health.ts";
 
 serve(withSentry("admin-crud", async (req: Request) => {
   const corsResponse = handleCorsV2(req);
