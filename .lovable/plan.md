@@ -6,6 +6,25 @@
 
 ---
 
+## Strategic Decision: Manus Coverage Report (2026-03-04)
+
+**Context:** External audit (Manus) suggested ~793 module gap from Risecheckout extraction.
+
+**Decision:** REJECTED bulk approach. Approved curated extraction of **~66-91 modules** based on AI agent utility (Protocol §2.3).
+
+| Domain | Manus Gap | Approved Gap | Rationale |
+| :--- | :--- | :--- | :--- |
+| SQL Patterns | ~166 | ~30-40 | Patterns, not individual policies |
+| UI Components | ~471 | ~20-30 | Architectural patterns, not individual components |
+| Utils/Lib | ~60 | ~15-20 | High-reuse helpers only |
+| Types/Interfaces | ~95 | 0 | Types belong inside consuming modules |
+
+**Priority order:** SQL Patterns → UI Patterns → High-value Utils
+
+**Status:** Awaiting user decision to begin extraction.
+
+---
+
 ## Compliance Matrix
 
 | Pattern | Coverage | Status |
