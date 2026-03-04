@@ -162,7 +162,7 @@ const AGENT_GUIDE = {
     "Do NOT ingest modules without why_it_matters and code_example — they will fail validation.",
     "Do NOT implement a module without first fetching its dependencies — you will miss required context.",
     "Do NOT skip devvault_diagnose when encountering errors — the knowledge base likely has a solution.",
-    "Do NOT create duplicate modules — always search first to check if similar knowledge exists.",
+    "Do NOT create duplicate modules — always call devvault_check_duplicates first. If duplicates are found, use devvault_update to enrich the existing module.",
     "Do NOT ignore _hint and _instructions fields in tool responses — they guide your next action.",
     "Do NOT use devvault_report_bug for user project bugs — use devvault_diary_bug instead.",
     "Do NOT forget to call devvault_task_end — abandoned tasks without closure pollute analytics.",
