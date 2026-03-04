@@ -84,6 +84,13 @@ serve(withSentry("admin-crud", async (req: Request) => {
         return handleListGlobalModules(req, client, user);
       case "unpublish-module":
         return handleUnpublishModule(req, client, user, body);
+      case "mcp-health": {
+        const { requireRole } = await import("../_shared/role-validator.ts");
+        await requireRole(client, user.id, "admin");
+        const result = await handleMcpHealth(client);
+        const { createSuccessResponse } = await import("../_shared/api-helpers.ts");
+        return createSuccessResponse(req, result);
+      }
       default:
         return createErrorResponse(req, ERROR_CODES.VALIDATION_ERROR, `Unknown action: ${action}`, 422);
     }
