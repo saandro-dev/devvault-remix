@@ -152,6 +152,7 @@ const AGENT_GUIDE = {
     "Prefer devvault_search over devvault_list when you know what problem you're solving.",
     "Prefer devvault_list over devvault_search when browsing a domain or exploring available knowledge.",
     "When a module has context_markdown, ALWAYS read it — it contains critical architecture decisions.",
+    "When ingesting new modules, ALWAYS call devvault_check_duplicates first — duplicates waste agent time and degrade search quality.",
     "When ingesting new modules, include why_it_matters and code_example — modules without these are considered incomplete.",
     "Use devvault_load_context with 'tags' parameter to find modules across projects (e.g. tags: ['evolution-api'] finds all Evolution API modules regardless of source_project).",
     "When ingesting or updating backend, architecture, or security modules that interact with a database, you MUST include the real database_schema DDL from the source project. Do NOT fabricate or guess schemas — extract the actual CREATE TABLE, CREATE POLICY, CREATE FUNCTION statements from the source project's migration files or database.",
