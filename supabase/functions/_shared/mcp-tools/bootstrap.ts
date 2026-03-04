@@ -7,7 +7,7 @@
  *
  * This is the ONLY entry point an AI agent needs — no external docs required.
  *
- * Tools: 29 total.
+ * Tools: 30 total.
  */
 
 import { createLogger } from "../logger.ts";
