@@ -26,6 +26,7 @@ export function AdminPage() {
           <TabsTrigger value="health">{t("admin.tabs.systemHealth")}</TabsTrigger>
           <TabsTrigger value="apiMonitor">{t("admin.tabs.apiMonitor")}</TabsTrigger>
           <TabsTrigger value="moderation">{t("admin.tabs.moderation")}</TabsTrigger>
+          <TabsTrigger value="mcpHealth">MCP Health</TabsTrigger>
         </TabsList>
 
         <TabsContent value="users">
