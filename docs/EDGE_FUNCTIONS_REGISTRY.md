@@ -12,10 +12,11 @@
 ╔═══════════════════════════════════════════════════════════════╗
 ║  ✅ DEVVAULT PROTOCOL V2 - 10.0/10 - DUAL-AUTH ARCHITECTURE   ║
 ║     16 Edge Functions | 2 Auth Systems | Zero Legacy Code      ║
-║     MCP Server v6.2: 29 Tools | Mandatory Modules System      ║
+║     MCP Server v6.3: 30 Tools | Duplicate Prevention System   ║
 ║     Phase 3: Hybrid Search (pgvector + tsvector + pg_trgm)     ║
 ║     Phase 6: SQL-Native Matching + Domain Inference            ║
 ║     Phase 6.1: Unified Backfill Engine (Strategy Pattern)      ║
+║     Phase 6.3: Deduplication + Duplicate Prevention            ║
 ║     Runtime: 100% Deno.serve() native                         ║
 ║     Secrets: Supabase Vault + Multi-Domain Keys               ║
 ║     verify_jwt: false (ALL 16 functions)                      ║
