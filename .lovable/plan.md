@@ -48,10 +48,21 @@
 
 | Metric | Value |
 | :--- | :--- |
-| Total global modules | 848 |
-| Modules at 100% completeness | **848 (100%)** |
+| Total global modules | 850 |
+| Modules at 100% completeness | **850 (100%)** |
 | Modules below 100% | **0** |
 | Drafts pending | **0** |
+
+### Architecture Guides (2026-03-04)
+
+Created 2 new `architecture_doc` modules as system integration guides:
+
+1. **`session-commander-architecture-guide`** — Explains how 5 components (Coordinator, SessionMonitor, RetryStrategy, Feedback, Types) integrate. `module_group: "session-commander"`, `implementation_order: 0`.
+2. **`token-manager-architecture-guide`** — Explains how 8 components (FSM, Service, UnifiedService, Heartbeat, CrossTabLock, Persistence, Types, barrel) integrate. `module_group: "token-manager"`, `implementation_order: 0`.
+
+Updated 5 existing modules with consistent `module_group` and `related_modules` back-references to their respective architecture guides.
+
+Cross-linked both architecture guides to each other via `related_modules`.
 
 ### Deduplication (v6.3)
 
