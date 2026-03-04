@@ -2,7 +2,23 @@
 # DevVault — Compliance Status (Protocol V1.1)
 
 **Last Updated:** 2026-03-04
-**Status:** ✅ 100% CONFORME (848 modules, all at 100% completeness)
+**Status:** ✅ 100% CONFORME (850 modules, all at 100% completeness)
+
+---
+
+## Improvement Plan Status (2026-03-04)
+
+| # | Item | Status | Notes |
+|---|---|---|---|
+| 1B | Semantic Search híbrida | ✅ ALREADY DONE | `devvault_search` already uses `hybrid_search_vault_modules` with embeddings |
+| 1A | Playbooks compostos MCP | ✅ ALREADY DONE | `devvault_get_playbook` (Tool 23) returns composed playbooks |
+| 1C | Module versioning | ✅ IMPLEMENTED | `vault_module_versions` table + auto-snapshot trigger + MCP Tool 31 (`devvault_get_version`) |
+| 2A | Markdown rendering | ✅ IMPLEMENTED | `react-markdown` + `remark-gfm` + `rehype-highlight` in `MarkdownRenderer` component |
+| 2C | Vault Detail campos completos | ✅ IMPLEMENTED | `ModuleMetadataSection` with collapsible sections for all fields |
+| 3C | Error Boundary global | ✅ IMPLEMENTED | `ErrorBoundary` component wrapping entire App |
+| 2B | Dashboard MCP analytics | ✅ IMPLEMENTED | `McpHealthTab` in Admin with tool usage, gaps, agent tasks |
+| 3A | MCP Health admin tab | ✅ IMPLEMENTED | Merged with 2B — same tab |
+| 2D | Advanced vault filters | ✅ IMPLEMENTED | `VaultAdvancedFilters` with module_type, validation_status, difficulty, language |
 
 ---
 
@@ -40,7 +56,7 @@
 | 300-line limit | 17/17 files | ✅ |
 | Zero `console.error` manual | 0 occurrences | ✅ |
 | Zero direct DB access from frontend | Confirmed | ✅ |
-| Handler delegation (>8 actions) | admin-crud + vault-crud | ✅ |
+| Handler delegation (>8 actions) | admin-crud (9 handlers) + vault-crud | ✅ |
 
 ---
 
@@ -53,35 +69,19 @@
 | Modules below 100% | **0** |
 | Drafts pending | **0** |
 
-### Architecture Guides (2026-03-04)
-
-Created 2 new `architecture_doc` modules as system integration guides:
-
-1. **`session-commander-architecture-guide`** — Explains how 5 components (Coordinator, SessionMonitor, RetryStrategy, Feedback, Types) integrate. `module_group: "session-commander"`, `implementation_order: 0`.
-2. **`token-manager-architecture-guide`** — Explains how 8 components (FSM, Service, UnifiedService, Heartbeat, CrossTabLock, Persistence, Types, barrel) integrate. `module_group: "token-manager"`, `implementation_order: 0`.
-
-Updated 5 existing modules with consistent `module_group` and `related_modules` back-references to their respective architecture guides.
-
-Cross-linked both architecture guides to each other via `related_modules`.
-
-### Deduplication (v6.3)
-
-1. **Deleted 8 duplicate modules** via surgical merge (856 → 848)
-2. **Cross-referenced 5 variant pairs** via `related_modules`
-3. **Implemented prevention system** — `check_duplicate_modules` RPC + GIN trigram index + MCP Tool 30 + pre-check in ingest/create
-
 ---
 
-## MCP Channel (Primary — 30 Tools, v6.3.0)
+## MCP Channel (Primary — 31 Tools, v6.4.0)
 
 - Edge Function: `devvault-mcp`
-- Tools registered: 30 (latest: `devvault_check_duplicates` — Tool 30)
-- Bootstrap guide: up-to-date (includes duplicate prevention workflow step 9)
-- Usage tracking: 31 event types covering all 30 tools
+- Tools registered: 31 (latest: `devvault_get_version` — Tool 31)
+- Bootstrap guide: up-to-date
+- Usage tracking: 32 event types covering all 31 tools
 
 ## Architecture Notes
 
 - All Edge Functions follow: CORS → Auth → Rate Limit → Sanitize → Route → Log → Rethrow
-- Handler delegation pattern: `admin-crud` (8 handlers), `vault-crud` (9 handlers)
+- Handler delegation pattern: `admin-crud` (9 handlers), `vault-crud` (9 handlers)
 - Backfill functions require admin role via `requireRole("admin")`
 - Duplicate prevention: trigram similarity check on both MCP ingest and UI create entry points
+- Module versioning: auto-snapshot trigger on code/context changes
