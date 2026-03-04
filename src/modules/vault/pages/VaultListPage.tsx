@@ -8,6 +8,7 @@ import { useVaultModules, useVaultDomainCounts } from "../hooks/useVaultModules"
 import { CreateModuleDialog } from "../components/CreateModuleDialog";
 import { VaultModuleCard } from "../components/VaultModuleCard";
 import { VaultDomainFilters } from "../components/VaultDomainFilters";
+import { VaultAdvancedFilters, type AdvancedFilters } from "../components/VaultAdvancedFilters";
 import type { VaultDomain, VaultScope } from "../types";
 
 export function VaultListPage() {
