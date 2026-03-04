@@ -6,6 +6,7 @@ import { RoleChangeDialog } from "../components/RoleChangeDialog";
 import { SystemHealthTab } from "../components/SystemHealthTab";
 import { ApiMonitorTab } from "../components/ApiMonitorTab";
 import { GlobalModerationTab } from "../components/GlobalModerationTab";
+import { McpHealthTab } from "../components/McpHealthTab";
 
 export function AdminPage() {
   const { t } = useTranslation();
@@ -25,6 +26,7 @@ export function AdminPage() {
           <TabsTrigger value="health">{t("admin.tabs.systemHealth")}</TabsTrigger>
           <TabsTrigger value="apiMonitor">{t("admin.tabs.apiMonitor")}</TabsTrigger>
           <TabsTrigger value="moderation">{t("admin.tabs.moderation")}</TabsTrigger>
+          <TabsTrigger value="mcpHealth">MCP Health</TabsTrigger>
         </TabsList>
 
         <TabsContent value="users">
@@ -44,6 +46,10 @@ export function AdminPage() {
 
         <TabsContent value="moderation">
           <GlobalModerationTab />
+        </TabsContent>
+
+        <TabsContent value="mcpHealth">
+          <McpHealthTab />
         </TabsContent>
       </Tabs>
     </div>

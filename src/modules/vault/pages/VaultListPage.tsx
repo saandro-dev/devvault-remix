@@ -8,6 +8,7 @@ import { useVaultModules, useVaultDomainCounts } from "../hooks/useVaultModules"
 import { CreateModuleDialog } from "../components/CreateModuleDialog";
 import { VaultModuleCard } from "../components/VaultModuleCard";
 import { VaultDomainFilters } from "../components/VaultDomainFilters";
+import { VaultAdvancedFilters, type AdvancedFilters } from "../components/VaultAdvancedFilters";
 import type { VaultDomain, VaultScope } from "../types";
 
 export function VaultListPage() {
@@ -17,6 +18,7 @@ export function VaultListPage() {
   const [activeDomain, setActiveDomain] = useState<VaultDomain | undefined>(undefined);
   const [searchQuery, setSearchQuery] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
+  const [advancedFilters, setAdvancedFilters] = useState<AdvancedFilters>({});
 
   const scope: VaultScope = useMemo(() => {
     if (location.pathname === "/vault/shared") return "shared_with_me";
@@ -65,6 +67,8 @@ export function VaultListPage() {
         domainCounts={domainCounts}
         totalCount={totalAll}
       />
+
+      <VaultAdvancedFilters filters={advancedFilters} onChange={setAdvancedFilters} />
 
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />

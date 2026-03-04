@@ -10,6 +10,7 @@
  *   - admin-revoke-api-key: Force-revoke any user's API key (owner only)
  *   - list-global-modules:  All modules with visibility = 'global' (admin+)
  *   - unpublish-module:     Set module visibility back to 'private' (admin+)
+ *   - mcp-health:           MCP tool usage analytics and knowledge gaps (admin+)
  *
  * Architecture: Modular handler delegation pattern.
  * Each action is handled by a dedicated module in ./handlers/.
@@ -37,6 +38,7 @@ import { handleListApiKeys } from "./handlers/list-api-keys.ts";
 import { handleAdminRevokeApiKey } from "./handlers/admin-revoke-api-key.ts";
 import { handleListGlobalModules } from "./handlers/list-global-modules.ts";
 import { handleUnpublishModule } from "./handlers/unpublish-module.ts";
+import { handleMcpHealth } from "./handlers/mcp-health.ts";
 
 serve(withSentry("admin-crud", async (req: Request) => {
   const corsResponse = handleCorsV2(req);
@@ -82,6 +84,13 @@ serve(withSentry("admin-crud", async (req: Request) => {
         return handleListGlobalModules(req, client, user);
       case "unpublish-module":
         return handleUnpublishModule(req, client, user, body);
+      case "mcp-health": {
+        const { requireRole } = await import("../_shared/role-validator.ts");
+        await requireRole(client, user.id, "admin");
+        const result = await handleMcpHealth(client);
+        const { createSuccessResponse } = await import("../_shared/api-helpers.ts");
+        return createSuccessResponse(req, result);
+      }
       default:
         return createErrorResponse(req, ERROR_CODES.VALIDATION_ERROR, `Unknown action: ${action}`, 422);
     }
