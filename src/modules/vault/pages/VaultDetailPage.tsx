@@ -12,6 +12,8 @@ import { DependencyCard } from "@/modules/vault/components/DependencyCard";
 import { useVaultModule, useDeleteVaultModule } from "@/modules/vault/hooks/useVaultModule";
 import { useRemoveDependency } from "@/modules/vault/hooks/useModuleDependencies";
 import { useAuth } from "@/modules/auth/providers/AuthProvider";
+import { MarkdownRenderer } from "@/modules/vault/components/MarkdownRenderer";
+import { ModuleMetadataSection } from "@/modules/vault/components/ModuleMetadataSection";
 import { ArrowLeft, Trash2, Copy, Check, Loader2, Pencil, Lock, Users, Globe, AlertTriangle, Package } from "lucide-react";
 import { VISIBILITY_COLORS } from "../types";
 import type { VisibilityLevel } from "../types";
