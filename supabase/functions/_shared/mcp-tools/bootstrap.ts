@@ -22,10 +22,11 @@ const logger = createLogger("mcp-tool:bootstrap");
 
 const AGENT_GUIDE = {
   _purpose:
-    "This guide teaches AI agents how to use DevVault's 29 MCP tools effectively. " +
+    "This guide teaches AI agents how to use DevVault's 30 MCP tools effectively. " +
     "Read it once after bootstrap, then follow the workflow. " +
     "CRITICAL: When debugging errors, ALWAYS consult devvault_diagnose BEFORE manual fixes. " +
-    "CRITICAL: Before starting any new project, call devvault_mandatory to understand required foundation modules.",
+    "CRITICAL: Before starting any new project, call devvault_mandatory to understand required foundation modules. " +
+    "CRITICAL: Before ingesting, call devvault_check_duplicates to avoid creating duplicate modules.",
 
   recommended_workflow: [
     "0. TASK START — Call devvault_task_start with your objective to begin tracking this work session.",
