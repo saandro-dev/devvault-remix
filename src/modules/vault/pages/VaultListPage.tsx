@@ -18,6 +18,7 @@ export function VaultListPage() {
   const [activeDomain, setActiveDomain] = useState<VaultDomain | undefined>(undefined);
   const [searchQuery, setSearchQuery] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
+  const [advancedFilters, setAdvancedFilters] = useState<AdvancedFilters>({});
 
   const scope: VaultScope = useMemo(() => {
     if (location.pathname === "/vault/shared") return "shared_with_me";
