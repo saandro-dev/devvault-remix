@@ -1124,39 +1124,76 @@ export type Database = {
           why_it_matters: string
         }[]
       }
-      get_visible_modules: {
-        Args: {
-          p_domain?: string
-          p_limit?: number
-          p_module_type?: string
-          p_offset?: number
-          p_query?: string
-          p_scope?: string
-          p_user_id: string
-        }
-        Returns: {
-          ai_metadata: Json
-          code_example: string
-          created_at: string
-          description: string
-          domain: string
-          id: string
-          language: string
-          module_type: string
-          phase_title: string
-          related_modules: string[]
-          saas_phase: number
-          source_project: string
-          tags: string[]
-          title: string
-          total_count: number
-          updated_at: string
-          usage_hint: string
-          validation_status: string
-          visibility: string
-          why_it_matters: string
-        }[]
-      }
+      get_visible_modules:
+        | {
+            Args: {
+              p_domain?: string
+              p_limit?: number
+              p_module_type?: string
+              p_offset?: number
+              p_query?: string
+              p_scope?: string
+              p_user_id: string
+            }
+            Returns: {
+              ai_metadata: Json
+              code_example: string
+              created_at: string
+              description: string
+              domain: string
+              id: string
+              language: string
+              module_type: string
+              phase_title: string
+              related_modules: string[]
+              saas_phase: number
+              source_project: string
+              tags: string[]
+              title: string
+              total_count: number
+              updated_at: string
+              usage_hint: string
+              validation_status: string
+              visibility: string
+              why_it_matters: string
+            }[]
+          }
+        | {
+            Args: {
+              p_difficulty?: string
+              p_domain?: string
+              p_language?: string
+              p_limit?: number
+              p_module_type?: string
+              p_offset?: number
+              p_query?: string
+              p_scope?: string
+              p_user_id: string
+              p_validation_status?: string
+            }
+            Returns: {
+              ai_metadata: Json
+              code_example: string
+              created_at: string
+              description: string
+              domain: string
+              id: string
+              language: string
+              module_type: string
+              phase_title: string
+              related_modules: string[]
+              saas_phase: number
+              source_project: string
+              tags: string[]
+              title: string
+              total_count: number
+              updated_at: string
+              usage_hint: string
+              validation_status: string
+              visibility: string
+              why_it_matters: string
+            }[]
+          }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
