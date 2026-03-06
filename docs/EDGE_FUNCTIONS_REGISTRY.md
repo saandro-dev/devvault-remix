@@ -27,6 +27,38 @@
 
 ---
 
+## v6.4 Changelog (2026-03-06)
+
+### Phase 6.4: Module Versioning + UI Completeness (30 → 31 Tools)
+
+Added automatic module versioning via PostgreSQL triggers, advanced filtering for the vault UI, and full metadata rendering.
+
+### New MCP Tools (+1, total 31)
+- **devvault_get_version (Tool 31):** Retrieves version history of a module. Accepts `module_id` and optional `version` filter. Returns snapshots of `code`, `context_markdown`, `code_example`, `test_code`, `database_schema`, `ai_metadata`, `common_errors`, `solves_problems`, and `change_summary` captured automatically on each update.
+
+### New Tables (+1)
+- **vault_module_versions:** Stores immutable snapshots of module content. Populated automatically by the `snapshot_vault_module_version` trigger on `vault_modules` UPDATE. Captures diffs when `code`, `context_markdown`, `code_example`, or `test_code` change.
+
+### New SQL Triggers (+1)
+- **`snapshot_vault_module_version`:** BEFORE UPDATE trigger on `vault_modules`. Only fires when content fields (`code`, `context_markdown`, `code_example`, `test_code`) actually change. Stores the OLD values as a version snapshot.
+
+### Updated SQL Functions (+1)
+- **`get_visible_modules`:** Added 3 new optional parameters: `p_validation_status`, `p_difficulty`, `p_language`. Enables advanced filtering from the vault list UI without additional RPCs.
+
+### UI Enhancements
+- **MarkdownRenderer:** New component rendering `context_markdown` with `react-markdown` + `remark-gfm` + `rehype-highlight`.
+- **ModuleMetadataSection:** Collapsible sections exposing all 13+ previously hidden module fields in `VaultDetailPage`.
+- **VaultAdvancedFilters:** Collapsible filter panel for `module_type`, `validation_status`, `difficulty`, and `language`. Fully wired to the `get_visible_modules` RPC.
+- **McpHealthTab:** Admin dashboard tab visualizing MCP tool usage rankings and top search queries.
+- **ErrorBoundary:** Global React error boundary preventing total UI crashes.
+
+### Architectural Impact
+- **Automatic versioning:** Zero agent/user effort — every content change is tracked
+- **Full-stack filter pipeline:** UI → hook → Edge Function → RPC — zero dead code
+- **Observability:** Admin can now monitor agent behavior patterns via MCP Health tab
+
+---
+
 ## v6.3 Changelog (2026-03-04)
 
 ### Phase 6.3: Deduplication + Duplicate Prevention (29 → 30 Tools)
