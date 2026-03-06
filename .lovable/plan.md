@@ -1,87 +1,134 @@
 
-# DevVault — Compliance Status (Protocol V1.1)
 
-**Last Updated:** 2026-03-04
-**Status:** ✅ 100% CONFORME (850 modules, all at 100% completeness)
+# Auditoria de Conformidade: Implementacoes Recentes vs Protocolo V1.1
 
----
+## Resultado Geral
 
-## Improvement Plan Status (2026-03-04)
-
-| # | Item | Status | Notes |
-|---|---|---|---|
-| 1B | Semantic Search híbrida | ✅ ALREADY DONE | `devvault_search` already uses `hybrid_search_vault_modules` with embeddings |
-| 1A | Playbooks compostos MCP | ✅ ALREADY DONE | `devvault_get_playbook` (Tool 23) returns composed playbooks |
-| 1C | Module versioning | ✅ IMPLEMENTED | `vault_module_versions` table + auto-snapshot trigger + MCP Tool 31 (`devvault_get_version`) |
-| 2A | Markdown rendering | ✅ IMPLEMENTED | `react-markdown` + `remark-gfm` + `rehype-highlight` in `MarkdownRenderer` component |
-| 2C | Vault Detail campos completos | ✅ IMPLEMENTED | `ModuleMetadataSection` with collapsible sections for all fields |
-| 3C | Error Boundary global | ✅ IMPLEMENTED | `ErrorBoundary` component wrapping entire App |
-| 2B | Dashboard MCP analytics | ✅ IMPLEMENTED | `McpHealthTab` in Admin with tool usage, gaps, agent tasks |
-| 3A | MCP Health admin tab | ✅ IMPLEMENTED | Merged with 2B — same tab |
-| 2D | Advanced vault filters | ✅ IMPLEMENTED | `VaultAdvancedFilters` with module_type, validation_status, difficulty, language |
+**7 de 9 implementacoes: SUCESSO TOTAL.**
+**2 problemas identificados que exigem correcao.**
 
 ---
 
-## Strategic Decision: Manus Coverage Report (2026-03-04)
+## Auditoria por Item Implementado
 
-**Context:** External audit (Manus) suggested ~793 module gap from Risecheckout extraction.
+### 1C. Versionamento de Modulos — SUCESSO
+- `vault_module_versions` table criada com trigger `snapshot_vault_module_version`
+- MCP Tool 31 `devvault_get_version` registrada em `register.ts` (linha 80)
+- Tool segue padrao: `createLogger`, `errorResponse`, `trackUsage`
+- Arquivo: 126 linhas (abaixo de 300)
+- Sem codigo morto
 
-**Decision:** REJECTED bulk approach. Approved curated extraction of **~66-91 modules** based on AI agent utility (Protocol §2.3).
+### 2A. Markdown Rendering — SUCESSO
+- `MarkdownRenderer.tsx`: 26 linhas, Single Responsibility, zero logica de negocio
+- Usa `react-markdown` + `remark-gfm` + `rehype-highlight`
+- Integrado em `VaultDetailPage.tsx` linha 185
+- Sem codigo morto (whitespace-pre-wrap anterior removido)
 
-| Domain | Manus Gap | Approved Gap | Rationale |
-| :--- | :--- | :--- | :--- |
-| SQL Patterns | ~166 | ~30-40 | Patterns, not individual policies |
-| UI Components | ~471 | ~20-30 | Architectural patterns, not individual components |
-| Utils/Lib | ~60 | ~15-20 | High-reuse helpers only |
-| Types/Interfaces | ~95 | 0 | Types belong inside consuming modules |
+### 2C. Vault Detail Campos Completos — SUCESSO
+- `ModuleMetadataSection.tsx`: 205 linhas, abaixo de 300
+- Exibe todos os campos: `why_it_matters`, `usage_hint`, `solves_problems`, `common_errors`, `test_code`, `code_example`, `database_schema`, `difficulty`, `estimated_minutes`, `version`, `module_group`, `implementation_order`, `related_modules`
+- Secoes colapsaveis com `Collapsible` do Radix
+- Integrado em `VaultDetailPage.tsx` linha 179
 
-**Priority order:** SQL Patterns → UI Patterns → High-value Utils
+### 2D. Filtros Avancados — PROBLEMA ENCONTRADO
+- `VaultAdvancedFilters.tsx`: 139 linhas, componente limpo
+- **Renderizado** na `VaultListPage.tsx` linha 71
+- **PROBLEMA: Os filtros avancados NAO sao passados para o hook `useVaultModules`.** O estado `advancedFilters` e gerenciado (linha 21), mas nunca e enviado ao `useVaultModules` (linha 35-39). Os filtros sao puramente visuais — mudar qualquer filtro nao afeta a query.
+- **Classificacao: CODIGO MORTO FUNCIONAL.** O componente renderiza, o estado muda, mas zero efeito no resultado. Viola 4.1 (Zero Remendos) e 4.4 (Divida Tecnica Zero).
 
-**Status:** Awaiting user decision to begin extraction.
+### 2B + 3A. MCP Health Tab — SUCESSO
+- `McpHealthTab.tsx`: 160 linhas, abaixo de 300
+- Usa `invokeEdgeFunction` (regra 5.5 respeitada)
+- `admin-crud/handlers/mcp-health.ts`: 55 linhas, Single Responsibility
+- Integrado em `admin-crud/index.ts` com `requireRole("admin")` (linha 89)
+- RPCs `get_tool_usage_ranking` e `get_top_searches` criadas no banco
 
----
-
-## Compliance Matrix
-
-| Pattern | Coverage | Status |
-| :--- | :--- | :--- |
-| `withSentry` wrapper | 16/16 Edge Functions | ✅ |
-| `createLogger` structured logging | 16/16 Edge Functions + role-validator | ✅ |
-| `sanitizeFields` input sanitization | 8/8 CRUDs + vault-ingest | ✅ |
-| `checkRateLimit` rate limiting | 10/10 user-facing functions | ✅ |
-| `authenticateRequest` auth | All functions (incl. backfills) | ✅ |
-| Admin role check on backfills | vault-backfill + vault-backfill-playbooks | ✅ |
-| Audit logging (admin ops) | 3/3 sensitive operations | ✅ |
-| Error rethrow to Sentry | 16/16 (vault-crud fixed) | ✅ |
-| 300-line limit | 17/17 files | ✅ |
-| Zero `console.error` manual | 0 occurrences | ✅ |
-| Zero direct DB access from frontend | Confirmed | ✅ |
-| Handler delegation (>8 actions) | admin-crud (9 handlers) + vault-crud | ✅ |
-
----
-
-## Module Quality (2026-03-04)
-
-| Metric | Value |
-| :--- | :--- |
-| Total global modules | 850 |
-| Modules at 100% completeness | **850 (100%)** |
-| Modules below 100% | **0** |
-| Drafts pending | **0** |
+### 3C. Error Boundary — SUCESSO
+- `ErrorBoundary.tsx`: 58 linhas, Class Component correto
+- Wrapper global em `App.tsx` linha 25
+- Fallback UI com "Try again" e "Reload page"
+- `console.error` no `componentDidCatch` — aceitavel (erro real, nao silenciamento)
 
 ---
 
-## MCP Channel (Primary — 31 Tools, v6.4.0)
+## Verificacao Protocolo Secao 4 (Vibe Coding Anti-Reativo)
 
-- Edge Function: `devvault-mcp`
-- Tools registered: 31 (latest: `devvault_get_version` — Tool 31)
-- Bootstrap guide: up-to-date
-- Usage tracking: 32 event types covering all 31 tools
+### 4.1 Zero Remendos
+- **VIOLACAO:** `VaultAdvancedFilters` e um remendo visual — aparenta funcionar mas nao filtra nada
 
-## Architecture Notes
+### 4.2 Arquiteto Antes de Pedreiro
+- OK. Todas as implementacoes seguem a arquitetura existente (handler delegation, Edge Functions, hooks pattern)
 
-- All Edge Functions follow: CORS → Auth → Rate Limit → Sanitize → Route → Log → Rethrow
-- Handler delegation pattern: `admin-crud` (9 handlers), `vault-crud` (9 handlers)
-- Backfill functions require admin role via `requireRole("admin")`
-- Duplicate prevention: trigram similarity check on both MCP ingest and UI create entry points
-- Module versioning: auto-snapshot trigger on code/context changes
+### 4.3 MVP Arquitetural
+- OK. Nenhuma implementacao cria acoplamento que impeca evolucao futura
+
+### 4.4 Divida Tecnica Zero
+- **VIOLACAO MENOR:** `VaultAdvancedFilters` cria divida tecnica — um curador vai usar os filtros achando que funcionam
+
+---
+
+## Verificacao Protocolo Secao 5 (Regras de Ouro)
+
+### 5.1 Protocolo de Raiz — OK
+- Nenhum try-catch generico adicionado
+
+### 5.4 Higiene de Codigo — OK
+- Todos os arquivos abaixo de 300 linhas
+- Nomenclatura em ingles tecnico
+- Sem comentarios obsoletos
+
+### 5.5 Zero Database Access from Frontend — PROBLEMA PRE-EXISTENTE
+- `SettingsPage.tsx` linhas 45-53: `supabase.storage.from("avatars").upload(...)` — acesso direto ao Storage
+- NAO e uma regressao das implementacoes recentes, mas permanece como violacao
+
+---
+
+## Documentacao e Comentarios
+
+### EDGE_FUNCTIONS_REGISTRY.md — DESATUALIZADO
+- Badge diz "MCP Server v6.3: 30 Tools" — deveria ser v6.4: 31 Tools
+- Changelog nao inclui entrada para v6.4 (Tool 31: `devvault_get_version`, `vault_module_versions` table)
+- Diz "16 Edge Functions" — confirmar se ainda sao 16
+
+### .lovable/plan.md — ATUALIZADO
+- Reflete corretamente 850 modulos, 100% conformidade, e v6.4.0
+
+### devvault-mcp/index.ts — ATUALIZADO
+- JSDoc header diz "31 tools" e "v6.4.0" — correto
+
+### register.ts — ATUALIZADO
+- Header diz "Total tools: 31" — correto, 31 registros na funcao
+
+---
+
+## Plano de Correcao (2 itens)
+
+### Correcao 1: VaultAdvancedFilters nao conectado ao hook
+- Passar `advancedFilters` para `useVaultModules` em `VaultListPage.tsx`
+- Atualizar `useVaultModules` para enviar `module_type`, `validation_status`, `difficulty`, `language` ao `vault-crud` list action
+- Atualizar `vault-crud/handlers/list.ts` para aceitar esses filtros e passa-los ao `get_visible_modules` RPC
+- Atualizar `get_visible_modules` RPC para aceitar e filtrar por esses campos
+
+### Correcao 2: EDGE_FUNCTIONS_REGISTRY.md desatualizado
+- Adicionar changelog v6.4
+- Atualizar badge para "31 Tools"
+- Documentar `devvault_get_version` e `vault_module_versions`
+
+---
+
+## Veredicto Final
+
+| Item | Status |
+|---|---|
+| 1C Versionamento | SUCESSO |
+| 2A Markdown | SUCESSO |
+| 2B MCP Analytics | SUCESSO |
+| 2C Campos Completos | SUCESSO |
+| 2D Filtros Avancados | FALHA — filtros nao conectados |
+| 3A MCP Health | SUCESSO |
+| 3C Error Boundary | SUCESSO |
+| Documentacao | PARCIAL — registry desatualizado |
+| Regra 5.5 Storage | PRE-EXISTENTE — nao e regressao |
+
+**Score: 7/9 implementacoes funcionais. 2 correcoes necessarias antes de declarar sucesso total.**
+
