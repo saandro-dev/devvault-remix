@@ -36,6 +36,10 @@ export function VaultListPage() {
     scope,
     domain: activeDomain,
     query: searchQuery || undefined,
+    module_type: advancedFilters.module_type,
+    validation_status: advancedFilters.validation_status,
+    difficulty: advancedFilters.difficulty,
+    language: advancedFilters.language,
   });
 
   const { data: domainData } = useVaultDomainCounts(scope);

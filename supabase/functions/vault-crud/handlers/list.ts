@@ -13,7 +13,11 @@ export async function handleList(
   user: User,
   body: Record<string, unknown>,
 ): Promise<Response> {
-  const { scope = "owned", domain, module_type, query, limit = 50, offset = 0 } = body;
+  const {
+    scope = "owned", domain, module_type, query,
+    limit = 50, offset = 0,
+    validation_status, difficulty, language,
+  } = body;
 
   const { data, error } = await client.rpc("get_visible_modules", {
     p_user_id: user.id,
@@ -23,6 +27,9 @@ export async function handleList(
     p_query: query || null,
     p_limit: limit,
     p_offset: offset,
+    p_validation_status: validation_status || null,
+    p_difficulty: difficulty || null,
+    p_language: language || null,
   });
   if (error) throw error;
 
