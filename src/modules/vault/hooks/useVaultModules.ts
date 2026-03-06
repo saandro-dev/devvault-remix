@@ -16,6 +16,8 @@ export interface VaultModuleFilters {
   validation_status?: VaultValidationStatus;
   tags?: string[];
   query?: string;
+  difficulty?: string;
+  language?: string;
 }
 
 interface VaultListResponse {
