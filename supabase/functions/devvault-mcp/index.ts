@@ -1,8 +1,13 @@
 /**
  * devvault-mcp/index.ts — Universal MCP Server for AI Agents (v6.4).
  *
- * Thin shell: Hono router, CORS, auth middleware, MCP transport.
- * All tool logic lives in _shared/mcp-tools/ (one file per tool).
+ * Thin shell: Hono router, CORS, MCP transport.
+ *
+ * Auth strategy (MCP Streamable HTTP spec):
+ *   - OPTIONS  → 204 CORS preflight (no auth)
+ *   - GET      → SSE session discovery, forwarded to transport (no auth)
+ *   - DELETE   → Session termination, forwarded to transport (no auth)
+ *   - POST     → JSON-RPC tool calls, authenticated via X-DevVault-Key
  *
  * IMPORTANT: McpServer, transport, and tools are singletons (module-level).
  * Auth is a mutable object updated per-request — safe because Edge Functions
