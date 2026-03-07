@@ -43,7 +43,7 @@ export const registerCheckDuplicatesTool: ToolRegistrar = (server, client, auth)
       const title = params.title as string;
       if (!title || !title.trim()) {
         return errorResponse({
-          code: "VALIDATION_ERROR",
+          code: "VALIDATION_FAILED",
           message: "title is required",
         });
       }

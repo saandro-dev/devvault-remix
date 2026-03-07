@@ -18,7 +18,9 @@ export type ErrorCode =
   | "INTERNAL_ERROR"
   | "PLAYBOOK_NOT_FOUND"
   | "TASK_NOT_FOUND"
-  | "BUG_NOT_FOUND";
+  | "BUG_NOT_FOUND"
+  | "MISSING_PARAM"
+  | "VERSION_NOT_FOUND";
 
 const RECOVERY_HINTS: Record<ErrorCode, string> = {
   MODULE_NOT_FOUND:
