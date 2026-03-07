@@ -75,12 +75,14 @@
 
 - Edge Function: `devvault-mcp`
 - Tools registered: 31 (latest: `devvault_get_version` — Tool 31)
+- Auth strategy: POST-only auth via `X-DevVault-Key`. GET/DELETE unauthenticated per MCP Streamable HTTP spec.
 - Bootstrap guide: up-to-date
 - Usage tracking: 32 event types covering all 31 tools
 
 ## Architecture Notes
 
 - All Edge Functions follow: CORS → Auth → Rate Limit → Sanitize → Route → Log → Rethrow
+- MCP auth bifurcation: GET/DELETE pass through unauthenticated; POST requires API key validation
 - Handler delegation pattern: `admin-crud` (9 handlers), `vault-crud` (9 handlers)
 - Backfill functions require admin role via `requireRole("admin")`
 - Duplicate prevention: trigram similarity check on both MCP ingest and UI create entry points
