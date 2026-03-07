@@ -1,8 +1,13 @@
 /**
  * devvault-mcp/index.ts — Universal MCP Server for AI Agents (v6.4).
  *
- * Thin shell: Hono router, CORS, auth middleware, MCP transport.
- * All tool logic lives in _shared/mcp-tools/ (one file per tool).
+ * Thin shell: Hono router, CORS, MCP transport.
+ *
+ * Auth strategy (MCP Streamable HTTP spec):
+ *   - OPTIONS  → 204 CORS preflight (no auth)
+ *   - GET      → SSE session discovery, forwarded to transport (no auth)
+ *   - DELETE   → Session termination, forwarded to transport (no auth)
+ *   - POST     → JSON-RPC tool calls, authenticated via X-DevVault-Key
  *
  * IMPORTANT: McpServer, transport, and tools are singletons (module-level).
  * Auth is a mutable object updated per-request — safe because Edge Functions
@@ -83,11 +88,12 @@ const app = new Hono();
 const SUPPORTED_PROTOCOL_VERSIONS = ["2025-03-26"];
 
 app.all("/*", async (c) => {
+  // ─── CORS Preflight ──────────────────────────────────────────────────
   if (c.req.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: CORS_HEADERS });
   }
 
-  // ─── Protocol Version Negotiation ─────────────────────────────────────
+  // ─── Protocol Version Logging ─────────────────────────────────────────
   const requestedVersion = c.req.raw.headers.get("mcp-protocol-version");
   if (requestedVersion) {
     logger.info("protocol version requested", {
@@ -98,13 +104,42 @@ app.all("/*", async (c) => {
 
   logger.info("incoming request", {
     method: c.req.method,
-    hasDevVaultKey: c.req.raw.headers.has("x-devvault-key"),
-    hasApiKey: c.req.raw.headers.has("x-api-key"),
-    hasAuthorization: c.req.raw.headers.has("authorization"),
     url: c.req.url,
     protocolVersion: requestedVersion,
   });
 
+  // ─── GET / DELETE: Unauthenticated (MCP Streamable HTTP spec) ─────────
+  // GET  = SSE session discovery / event stream
+  // DELETE = session termination
+  // These MUST NOT require auth per the MCP Streamable HTTP spec.
+  if (c.req.method === "GET" || c.req.method === "DELETE") {
+    try {
+      const mcpResponse = await httpHandler(c.req.raw);
+      return withCors(mcpResponse);
+    } catch (err) {
+      logger.error("transport error (unauthenticated)", {
+        method: c.req.method,
+        message: String(err),
+        stack: err instanceof Error ? err.stack : undefined,
+      });
+      return withCors(new Response(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          error: {
+            code: -32603,
+            message: `Internal MCP error: ${String(err)}`,
+            data: {
+              _recovery_hint: "Retry the request. If the error persists, report via devvault_diary_bug.",
+            },
+          },
+          id: null,
+        }),
+        { status: 500, headers: { "Content-Type": "application/json" } },
+      ));
+    }
+  }
+
+  // ─── POST: Authenticated (JSON-RPC tool calls) ───────────────────────
   const authResult = await authenticateRequest(c.req.raw);
 
   if (authResult instanceof Response) {
@@ -139,12 +174,12 @@ app.all("/*", async (c) => {
               data: {
                 requested_version: requestedVersion,
                 supported_versions: SUPPORTED_PROTOCOL_VERSIONS,
-                workaround: "Use POST with Content-Type: application/json for tool calls. SSE streaming may not work with unsupported versions.",
+                workaround: "Use POST with Content-Type: application/json for tool calls.",
               },
             },
             id: null,
           }),
-          { status: 200, headers: { "Content-Type": "application/json" } }
+          { status: 200, headers: { "Content-Type": "application/json" } },
         ));
       }
     }
@@ -175,7 +210,7 @@ app.all("/*", async (c) => {
         },
         id: null,
       }),
-      { status: 500, headers: { "Content-Type": "application/json" } }
+      { status: 500, headers: { "Content-Type": "application/json" } },
     ));
   }
 });
