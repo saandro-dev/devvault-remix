@@ -49,6 +49,10 @@ const RECOVERY_HINTS: Record<ErrorCode, string> = {
     "Task not found. Ensure you called devvault_task_start first to create a task.",
   BUG_NOT_FOUND:
     "Bug entry not found. Use devvault_diary_list to find existing bug IDs.",
+  MISSING_PARAM:
+    "A required parameter is missing. Check the inputSchema for this tool to see which fields are required.",
+  VERSION_NOT_FOUND:
+    "The specified version was not found for this module. Use devvault_get_version with only the module_id to list available versions.",
 };
 
 interface ErrorResponseOptions {
